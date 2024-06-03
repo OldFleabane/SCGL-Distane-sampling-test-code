@@ -1,0 +1,45 @@
+---
+title: "SCGL Test R"
+author: "Jonathan Amegin"
+date: "2024-06-03"
+output: html_document
+---
+
+# SCGL Distance Sampling data analysis
+
+A test project cleaning and analyzing the Distance Sampling data collected on the Sclerocactus glauca (SCGL) trip
+
+End goals:
+
+-   Plot the individual observations for each site on a coordinate grid
+-   Mark the observations which overlap/were observed both going NS & EW.
+-   Get a percent observational error to apply across the observed population.
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+# tidyverse contains both 'dyplr' and 'ggplot2'
+library(tidyverse)
+
+```
+
+There are 3 associated .csv files.
+
+-   "distanceSampling_1.csv" contains all of the individual observations of SCGL
+-   "Sclerocactus_glaucus_Distance_Sampling_0.csv" contains the distance between transects
+-   "transect_2.csv" contains the transect number and transect length
+
+*These are needed to join the transect length data into the "distanceSampling_1.csv" data*
+
+```{r loading csv's message=FALSE, warning=FALSE, include=FALSE}
+scgl_obs <- read_csv("~/SCGL_TEST_R/data/distanceSampling_1.csv")
+scgl_trans_spacing <- read_csv("~/SCGL_TEST_R/data/Sclerocactus_glaucus_Distance_Sampling_0.csv")
+scgl_trans_length <- read_csv("~/SCGL_TEST_R/data/transect_2.csv")
+```
+
+## Take a Look:
+
+
+## Clean Up
+
+search for any NA's in the data
+
+
