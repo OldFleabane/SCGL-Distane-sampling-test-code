@@ -40,13 +40,19 @@ scgl_trans_length <- read_csv("data_raw/transect_2.csv")
 
 ## Clean Up
 
-
+'cactus' will contain our cactus observations with only the relevant data for placing the locations.
 ```{r}
 cactus <- scgl_obs %>%  
-  select(`Transect Meter Mark`, `transectNumber_`, `transectOrientation`, `siteName`, `distBetweenTransects`, `Distance To Group`) %>% 
-  group_by(siteName)
+  select(`Transect Meter Mark`, `transectNumber_`, `transectOrientation`, `siteName`, `distBetweenTransects`, `Distance To Group`)
+head(cactus)
 
 ```
 
+we can look at total number of cactus seen per site. 
+```{r}
+cactus %>% 
+  group_by(siteName) %>% 
+  summarize(total = sum(!is.na(`Transect Meter Mark`)) )
+```
 
 
