@@ -18,7 +18,7 @@ End goals:
 ```{r message=FALSE, warning=FALSE, include=FALSE}
 # tidyverse contains both 'dyplr' and 'ggplot2'
 library(tidyverse)
-
+library(dplyr)
 ```
 
 There are 3 associated .csv files.
@@ -30,9 +30,9 @@ There are 3 associated .csv files.
 *These are needed to join the transect length data into the "distanceSampling_1.csv" data*
 
 ```{r loading csv's message=FALSE, warning=FALSE, include=FALSE}
-scgl_obs <- read_csv("~/SCGL_TEST_R/data/distanceSampling_1.csv")
-scgl_trans_spacing <- read_csv("~/SCGL_TEST_R/data/Sclerocactus_glaucus_Distance_Sampling_0.csv")
-scgl_trans_length <- read_csv("~/SCGL_TEST_R/data/transect_2.csv")
+scgl_obs <- read_csv("data_raw/distanceSampling_1.csv")
+scgl_trans_spacing <- read_csv("data_raw/Sclerocactus_glaucus_Distance_Sampling_0.csv")
+scgl_trans_length <- read_csv("data_raw/transect_2.csv")
 ```
 
 ## Take a Look:
@@ -40,6 +40,13 @@ scgl_trans_length <- read_csv("~/SCGL_TEST_R/data/transect_2.csv")
 
 ## Clean Up
 
-search for any NA's in the data
+
+```{r}
+cactus <- scgl_obs %>%  
+  select(`Transect Meter Mark`, `transectNumber_`, `transectOrientation`, `siteName`, `distBetweenTransects`, `Distance To Group`) %>% 
+  group_by(siteName)
+
+```
+
 
 
