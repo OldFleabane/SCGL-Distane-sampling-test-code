@@ -74,9 +74,19 @@ filter(`Transect Meter Mark` > 100 & `Distance To Group` > 4)
 ```
 
 Join the two dataframes to show the length of the transect that each cactus was observed on. Joins based on the ParentGlobalID of the cactus observation matching the GlobalID of the transect it was observed on.
+Then remove several columns that will not contribute to the overall analysis.
 
 ```{r}
-joined_scgl <- left_join(scgl_obs, scgl_trans_length, join_by ("ParentGlobalID"=="GlobalID"), relationship = "many-to-one")
+#make a clean version of 'scgl_trans_length' omitting extra data not useful to alaysis
+clean_length <- scgl_trans_length %>% 
+  select(GlobalID, `Transect Number`,`Transect Direction`,`Transect Length`)
+```
+
+```{r}
+joined_scgl <- left_join(scgl_obs, clean_length, join_by ("ParentGlobalID"=="GlobalID"), relationship = "many-to-one")
+
+#cleans up extra data we dont need for looking at just the cactus
+joined_scgl <- joined_scgl[,-c(11,12,15:21)]
 ```
 
 
