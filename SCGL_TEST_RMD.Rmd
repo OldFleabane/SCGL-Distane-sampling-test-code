@@ -55,4 +55,28 @@ cactus %>%
   summarize(total = sum(!is.na(`Transect Meter Mark`)) )
 ```
 
+```{r}
+cactus %>% 
+  mutate( transectOrientation = factor(transectOrientation)) %>% 
+  mutate( transectNumber_ = factor(transectNumber_)) %>% 
+  mutate( siteName = factor(siteName))
+```
+
+```{r}
+cactus %>% 
+  filter(`Transect Meter Mark` > 100 & `Distance To Group` > 4)
+```
+
+```{r}
+scgl_obs %>% 
+filter(`Transect Meter Mark` > 100 & `Distance To Group` > 4)
+
+```
+
+Join the two dataframes to show the length of the transect that each cactus was observed on. Joins based on the ParentGlobalID of the cactus observation matching the GlobalID of the transect it was observed on.
+
+```{r}
+joined_scgl <- left_join(scgl_obs, scgl_trans_length, join_by ("ParentGlobalID"=="GlobalID"), relationship = "many-to-one")
+```
+
 
