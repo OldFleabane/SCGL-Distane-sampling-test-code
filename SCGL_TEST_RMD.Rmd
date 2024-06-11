@@ -89,4 +89,16 @@ joined_scgl <- left_join(scgl_obs, clean_length, join_by ("ParentGlobalID"=="Glo
 joined_scgl <- joined_scgl[,-c(11,12,15:21)]
 ```
 
+```{r}
+
+unique(joined_scgl$siteName)
+
+#joined_scgl$siteName <- na.omit(joined_scgl$siteName)  not quite the right idea
+
+site_11 <- joined_scgl %>% 
+  filter(siteName == "11")
+# site_names <- c("site_1", "site_3","site_10", "site_11", "site_12")   want to create vector of variable names to assign new tables containing only the observations for a specific site. Think I can do it with a loop instead of writing each one out. Maybe use an anonymous function to write a looping script 
+#that reads the unique variables for 'siteName' and writes an object of the filtered table based on the character string. or use name() function after filter looping based on unique variables. 
+```
+
 
