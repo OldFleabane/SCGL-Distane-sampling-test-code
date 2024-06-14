@@ -1,0 +1,149 @@
+---
+title: "R Distance Notes and Test"
+author: "Jonathan Amegin"
+date: "2024-06-14"
+output: html_document
+---
+
+```{r}
+install.packages('Distance')
+library(Distance)
+
+```
+
+Exploring using the R package 'Distance' for the SCGL distance sampling data
+
+-   The data.frame must contain a column named distance
+
+-   Additional reserved names include object and detected, these are not required for conventional distance sampling and should be avoided
+
+-   We refer to this data format (where all information is contained in one table) as “flatfile” as it can be easily created in a single spreadsheet.
+
+-   To ensure that the model is not overly influenced by distances far from zero and that observer time is not spent looking for far away objects, we discard or do not record observations beyond a given **truncation distance** (during analysis or while collecting data in the field). *(maybe the 3 meter cutoff we had in our design??)*
+
+Column names:
+
+-   *Distance*
+
+-   *Sample.Label*, the ID of the transect;
+
+-   *Effort*, transect effort (for lines their length and for points the number of times that point was visited);
+
+-   *Region.Label*, the stratum containing the transect (which may be from pre- or post-survey stratification, see “Estimating abundance and variance”);
+
+-   *Area*, the area of the strata.
+
+<!-- -->
+
+-   *size* is reserved for the cluster sizes (sometimes referred to as group sizes) in this case each row represents an observation of a cluster rather than individual
+
+Probably want to include the covariate for Clustering. We have the data on if we observed clusters of SCGL, but not certain if that will affect detection rates. Will attempt doing analysis with and without the covariate.
+
+```{r}
+data("wren_lt")
+
+head(wren_lt)
+
+hist(wren_lt$distance, xlab = "Distance (m)", main= "Winter Wren line transects")
+
+```
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(janitor)
+### adding data
+scgl_obs <- read_csv("data_raw/distanceSampling_1.csv")
+scgl_trans_spacing <- read_csv("data_raw/Sclerocactus_glaucus_Distance_Sampling_0.csv")
+scgl_trans_length <- read_csv("data_raw/transect_2.csv")
+
+###cleaning data
+clean_length <- scgl_trans_length %>% 
+  select(GlobalID, `Transect Number`,`Transect Direction`,`Transect Length`)
+
+joined_scgl <- left_join(scgl_obs, clean_length, join_by ("ParentGlobalID"=="GlobalID"), relationship = "many-to-one")
+
+joined_scgl <- joined_scgl[,-c(11,12,15:21)]
+joined_scgl <- clean_names(joined_scgl)
+```
+
+```{r}
+##formating table for use in 'Distance' package
+
+# distance_to_group = distance
+# transect_length = effort
+# size = cluster size (sum of all #'s in group)
+# transect_number = sample.label
+# object_id = object
+
+Dist <- joined_scgl %>% 
+rename(distance = distance_to_group, 
+       Effort = transect_length, 
+       object = object_id,
+       Sample.Label = transect_number,
+       Study.Area = site_name)
+
+ Dist$Sample.Label <- as.character(Dist$Sample.Label)
+  
+ Dist <- Dist %>% 
+  mutate(Sample.Label = paste(Sample.Label, transect_orientation, sep = ".")) %>% 
+  mutate(number_seedlings_in_group = ifelse(is.na(number_seedlings_in_group), 0, number_seedlings_in_group),
+         number_vegetative_in_group = ifelse(is.na(number_vegetative_in_group), 0, number_vegetative_in_group), 
+         number_reproductive_in_group = ifelse(is.na(number_reproductive_in_group), 0, number_reproductive_in_group),
+         size = number_seedlings_in_group + number_vegetative_in_group + number_reproductive_in_group) %>% 
+   select(Sample.Label, Effort, object, distance, size, Study.Area)
+
+```
+
+make a histogram.
+
+```{r}
+Dist <- filter(Dist, distance <= 3)
+
+hist(Dist$distance, xlab = "Distance (m)", main = "SCGL line transects")
+```
+
+```{r}
+conversion.factor <- convert_units(distance_units = "meter", effort_units = "meter", area_units = NULL)
+
+Dist.hn <- ds(data = Dist, key = "hn", adjustment = NULL, obs_table = TRUE)
+
+
+Dist.unif.cos <- ds(Dist, key="unif", adjustment="cos")
+
+
+Dist.hr.poly <- ds(Dist, key="hr", adjustment="poly")
+
+
+
+AIC(Dist.hn, Dist.hr.poly, Dist.unif.cos)
+```
+
+```{r}
+gof_ds(Dist.hn)
+
+ par(mfrow = c(1,3))
+plot(Dist.hn, main = "half normal")
+plot(Dist.hr.poly, main = "hazard")
+plot(Dist.unif.cos, main = "uniform cosine")
+
+knitr::kable(summarize_ds_models(Dist.hn, Dist.hr.poly, Dist.unif.cos),digits=3,
+             caption="Model comparison for SCGL data across all sites.")
+```
+
+```{R}
+Dist.size <- ds(Dist, key = "hr", formula = ~size)
+ 
+plot(Dist.size)
+
+gof_ds(Dist.size)
+
+Dist.nosize <- Dist %>% 
+  mutate(size = NULL) %>% 
+  ds( key = "hr")
+plot(Dist.nosize)
+
+AIC(Dist.hn, Dist.hr.poly, Dist.nosize, Dist.unif.cos)
+
+summary(Dist.nosize)
+```
