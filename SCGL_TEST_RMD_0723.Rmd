@@ -1,0 +1,182 @@
+---
+title: "SCGL Test R"
+author: "Jonathan Amegin"
+date: "2024-06-03"
+output: html_document
+---
+
+# SCGL Distance Sampling data analysis
+
+A test project cleaning and analyzing the Distance Sampling data collected on the Sclerocactus glauca (SCGL) trip
+
+End goals:
+
+-   Plot the individual observations for each site on a coordinate grid
+-   Mark the observations which overlap/were observed both going NS & EW.
+-   Get a percent observational error to apply across the observed population.
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+# tidyverse contains both 'dyplr' and 'ggplot2'
+library(tidyverse)
+library(dplyr)
+library(sf)
+library(raster)
+```
+
+There are 3 associated .csv files.
+
+-   "distanceSampling_1.csv" contains all of the individual observations of SCGL
+-   "Sclerocactus_glaucus_Distance_Sampling_0.csv" contains the distance between transects
+-   "transect_2.csv" contains the transect number and transect length
+
+*These are needed to join the transect length data into the "distanceSampling_1.csv" data*
+
+```{r loading csv's message=FALSE, warning=FALSE, include=FALSE}
+scgl_obs <- read_csv("data_raw/distanceSampling_1.csv")
+scgl_trans_spacing <- read_csv("data_raw/Sclerocactus_glaucus_Distance_Sampling_0.csv")
+scgl_trans_length <- read_csv("data_raw/transect_2.csv")
+```
+
+### Take a Look:
+
+### Clean Up
+
+'cactus' will contain our cactus observations with only the relevant data for placing the locations.
+
+```{r}
+cactus <- scgl_obs %>%  
+  dplyr::select(`ObjectID`, `Transect Meter Mark`, `transectNumber_`, `transectOrientation`, `siteName`, `distBetweenTransects`, `Distance To Group`, `Direction To Group`)
+head(cactus)
+
+```
+
+we can look at total number of cactus seen per site.
+
+```{r}
+cactus %>% 
+  group_by(siteName) %>% 
+  summarize(total = sum(!is.na(`Transect Meter Mark`)) )
+```
+
+```{r}
+cactus %>% 
+  mutate( transectOrientation = factor(transectOrientation)) %>% 
+  mutate( transectNumber_ = factor(transectNumber_)) %>% 
+  mutate( siteName = factor(siteName))
+```
+
+Join the two dataframes to show the length of the transect that each cactus was observed on. Joins based on the ParentGlobalID of the cactus observation matching the GlobalID of the transect it was observed on.
+
+```{r}
+clean_length <- scgl_trans_length %>% 
+  select(GlobalID, `Transect Number`,`Transect Direction`,`Transect Length`)
+```
+
+```{r}
+joined_scgl <- left_join(scgl_obs, clean_length, join_by ("ParentGlobalID"=="GlobalID"), relationship = "many-to-one")
+
+
+joined_scgl <- joined_scgl[,-c(11,12,15:21)]
+ 
+```
+
+### Working towards filtering relevent observations for the crossed design capture/recapture analysis
+
+Will need to filter observations within 3 meters +/- of each crossed interval (mostly every 10m) and within 3m of the tape
+
+Can I generate a list that is a sequence of each 10 interval, then filter observations based on whether they are \<=3 AND \>=3 of EACH interval in the list?
+
+The object 'Crossed' will contain only the observations needed for the distance recapture analysis
+
+```{r}
+# create a sequence of the intervals for the desired transect using seq() the trans length data, and the trans spacing data
+
+intervals <- seq(from = 0, to = 100, by = 10)
+
+# Use a 'forloop' to filter cactus in the range we need. 
+
+Crossed <- cactus %>% filter( between(`Transect Meter Mark`, 0, 0)  )
+
+for( i in intervals){
+  
+ output <- filter(cactus, between(`Transect Meter Mark`, i-3, i+3)  )
+Crossed <- rbind(Crossed, output)
+}
+Crossed <- filter(Crossed, `Distance To Group` <= 4)
+
+# 'Crossed' now contains all cactus relevent to the analysis. 
+
+nrow(Crossed)
+    
+```
+
+Number of cactus observations within the 3 meter radius square from the interval crossings is 183 across all sites.
+
+```{r}
+Crossed$siteName <- as.factor(Crossed$siteName)
+Crossed$transectNumber_ <- as.factor(Crossed$transectNumber_)
+ 
+```
+
+### Loading and creating the plot shapefiles
+
+```{r}
+shp_origins <- st_read("data_raw/SCGL_shapes/Sclerocactus_glaucus_DistanceSampling_OriginEndPoints.shp")
+shp_trans <- st_read("data_raw/SCGL_shapes/Sclerocactus_glaucus_DistanceSampling_Trasnsects.shp")
+
+
+
+fram_shp <- ggplot(filter(shp_trans, site == "Fram")) +
+  geom_sf()+
+  geom_sf_label(aes(label = transectNu), size = 2) +
+  theme(legend.position = "none", axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank()) +
+  labs(subtitle = "Fram")
+
+Bridgeport_shp <- ggplot(filter(shp_trans, site == "Bridgeport")) +
+  geom_sf()+
+  geom_sf_label(aes(label = transectNu), size = 2) +
+  theme(legend.position = "none", axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank()) +
+  labs(subtitle = "Bridgeport")
+
+Picnic_shp <- ggplot(filter(shp_trans, site == "Picnic")) +
+  geom_sf()+
+  geom_sf_label(aes(label = transectNu), size = 2) +
+  theme(legend.position = "none", axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank()) +
+  labs(subtitle = "Picnic")
+
+
+ggsave(filename = "Fram_shp.png", plot = fram_shp)
+ggsave(filename = "Bridgeport_shp.png", plot = Bridgeport_shp)
+ggsave(filename = "Picnic_shp.png", plot = Picnic_shp)
+
+```
+
+### Transforming transect data into (x,y) format.
+
+The current data will be transformed into (x,y) based solely on the transect it was observed on, then the plot layout/design will be analyzed to extrapolate the transformation needed to place these coords all on the same coord grid.
+
+-   For NS transects the 'Transect Meter Mark' is the Y coord, and the 'Distance to group' is the X coord. This is reversed for the EW.
+
+-   For EW transects the 'Transect Meter Mark' is the X coord, and the 'Distance to group' is the Y coord.
+
+-   The 'Direction to Group' informs whether to count the X/Y as negative with the transect as origin. 
+
+```{r}
+Crossed <- janitor::clean_names(Crossed)
+
+Crossed %>% 
+  if (direction_to_group == "-") {
+    mutate(distance_to_group = distance_to_group * -1)
+    
+  }
+
+```
