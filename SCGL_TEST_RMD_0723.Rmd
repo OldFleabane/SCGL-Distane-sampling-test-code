@@ -15,6 +15,8 @@ End goals:
 -   Mark the observations which overlap/were observed both going NS & EW.
 -   Get a percent observational error to apply across the observed population.
 
+Site name: 3, 1= picnic, 10= bridgport, 12= Fram
+
 ```{r message=FALSE, warning=FALSE, include=FALSE}
 # tidyverse contains both 'dyplr' and 'ggplot2'
 library(tidyverse)
@@ -120,6 +122,8 @@ Crossed$transectNumber_ <- as.factor(Crossed$transectNumber_)
 
 ### Loading and creating the plot shapefiles
 
+These shapefiles were downloaded from the DBG ArcGIS projects. <https://researchdbg.maps.arcgis.com/home/item.html?id=00b0578b76e3472b9281525d06a6db00>
+
 ```{r}
 shp_origins <- st_read("data_raw/SCGL_shapes/Sclerocactus_glaucus_DistanceSampling_OriginEndPoints.shp")
 shp_trans <- st_read("data_raw/SCGL_shapes/Sclerocactus_glaucus_DistanceSampling_Trasnsects.shp")
@@ -168,15 +172,91 @@ The current data will be transformed into (x,y) based solely on the transect it 
 
 -   For EW transects the 'Transect Meter Mark' is the X coord, and the 'Distance to group' is the Y coord.
 
--   The 'Direction to Group' informs whether to count the X/Y as negative with the transect as origin. 
+-   The 'Direction to Group' informs whether to count the X/Y as negative with the transect as origin.
 
 ```{r}
+# cleaning the names of columns to make scripting easier
 Crossed <- janitor::clean_names(Crossed)
 
-Crossed %>% 
-  if (direction_to_group == "-") {
-    mutate(distance_to_group = distance_to_group * -1)
-    
-  }
+# Working on making the 'distance to group' be negative based on the 'direction to group'
+# test variable
+Crossed1 <- Crossed
+
+Crossed1 <- Crossed1 %>% 
+   mutate( distance_to_group = case_when(direction_to_group == "-" ~ distance_to_group* -1, TRUE ~ distance_to_group ))
+
+# setting up the (X,Y) columns to then transform based on plot analysis
+Crossed1 <- Crossed1 %>% 
+  mutate( x = case_when(transect_orientation == "NS" ~ distance_to_group, transect_orientation == "EW" ~ transect_meter_mark), 
+          y = case_when(transect_orientation == "EW" ~ distance_to_group, transect_orientation == "NS" ~ transect_meter_mark))
+
+ 
+```
+
+Working on transforming the Fram coordinates to play nice.
+
+```{r}
+Fram <- Crossed1 %>% 
+  filter(site_name == 12)
 
 ```
+
+-   Fram distance between transects = 10m, (really this means the intersection points occur at 10m intervals)
+
+-   Fram transects are 1NS, 2NS 3NS, 5EW, 7EW, 8EW, 9EW.
+
+-   EW number indicates the meter distance that these tapes were laid from the origin of the NS transects
+
+-   The 'transect meter mark' for at least one of the NS transects is inverse (need to subtract 100)
+
+    \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_
+
+-   origin (0,0) will be SE corner of plot design.
+
+-   The EW 0m mark will serve as y = 0.
+
+-   1NS 0m mark will be set to (-10, 0).
+
+-   1NS 'x' add 10m, 'y' add 0m
+
+-   2NS 'x' add 20m, 'y' add 0m
+
+-   3NS 'x' add 30m, 'y' add 0m
+
+-   1EW 'y' add 10m, 'x' add 0m
+
+-   5EW 'y' add 50m, 'x' add 10m (starts on (1NS)-10,50), not at (0,50))
+
+-   7EW 'y' add 70m, 'x' add 0m
+
+-   8EW 'y' add 80m, 'x' add 0m
+
+-   9EW 'y' add 90m, 'x' add 0m (plot shapefile uncertain to starting point, but 39m measures to (0,90))
+
+```{r}
+# Transforming the coordinates to match the plot design
+Fram_test <- Fram %>% 
+  mutate( 
+    x = case_when(transect_orientation == "NS" & transect_number == "1" ~ x + 10, 
+                  transect_orientation == "NS" & transect_number == "2" ~ x + 20,
+                  transect_orientation == "NS" & transect_number == "3" ~ x + 30,
+                  transect_orientation == "EW" & transect_number == "5" ~ x + 10,
+                  TRUE ~ x
+                  ),
+    y = case_when(transect_orientation == "EW" & transect_number == "1" ~ y + 10,
+                  transect_orientation == "EW" & transect_number == "5" ~ y + 50,
+                  transect_orientation == "EW" & transect_number == "7" ~ y + 70,
+                  transect_orientation == "EW" & transect_number == "8" ~ y + 80,
+                  transect_orientation == "EW" & transect_number == "9" ~ y + 90,
+                  TRUE ~ y)
+    )
+
+```
+
+```{r}
+Fram_test %>% 
+  group_by(transect_orientation) %>% 
+  ggplot(mapping = aes(x,y, color = Fram_test$transect_orientation)) +
+            geom_point() +
+  scale_y_continuous(breaks = c(10, 50, 70, 80, 90))+
+  scale_x_continuous(breaks = c(10, 20, 30))
