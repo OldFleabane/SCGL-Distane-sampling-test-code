@@ -395,3 +395,4 @@ three_test %>%
   geom_segment( data = three_seg, x = three_seg$x, y = three_seg$y, xend = three_seg$xend, yend= three_seg$yend)
        
 ```
+should be connected to GIT now
