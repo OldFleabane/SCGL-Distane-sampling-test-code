@@ -71,7 +71,7 @@ Join the two dataframes to show the length of the transect that each cactus was 
 
 ```{r}
 clean_length <- scgl_trans_length %>% 
-  select(GlobalID, `Transect Number`,`Transect Direction`,`Transect Length`)
+  dplyr::select(GlobalID, `Transect Number`,`Transect Direction`,`Transect Length`)
 ```
 
 ```{r}
@@ -88,7 +88,7 @@ Will need to filter observations within 3 meters +/- of each crossed interval (m
 
 Can I generate a list that is a sequence of each 10 interval, then filter observations based on whether they are \<=3 AND \>=3 of EACH interval in the list?
 
-The object 'Crossed' will contain only the observations needed for the distance recapture analysis
+The object 'crossed' will contain only the observations needed for the distance recapture analysis
 
 ```{r}
 # create a sequence of the intervals for the desired transect using seq() the trans length data, and the trans spacing data
@@ -97,26 +97,26 @@ intervals <- seq(from = 0, to = 100, by = 10)
 
 # Use a 'forloop' to filter cactus in the range we need. 
 
-Crossed <- cactus %>% filter( between(`Transect Meter Mark`, 0, 0)  )
+crossed <- cactus %>% filter( between(`Transect Meter Mark`, 0, 0)  )
 
 for( i in intervals){
   
  output <- filter(cactus, between(`Transect Meter Mark`, i-3, i+3)  )
-Crossed <- rbind(Crossed, output)
+crossed <- rbind(crossed, output)
 }
-Crossed <- filter(Crossed, `Distance To Group` <= 4)
+crossed <- filter(crossed, `Distance To Group` <= 4)
 
-# 'Crossed' now contains all cactus relevent to the analysis. 
+# 'crossed' now contains all cactus relevent to the analysis. 
 
-nrow(Crossed)
+nrow(crossed)
     
 ```
 
 Number of cactus observations within the 3 meter radius square from the interval crossings is 183 across all sites.
 
 ```{r}
-Crossed$siteName <- as.factor(Crossed$siteName)
-Crossed$transectNumber_ <- as.factor(Crossed$transectNumber_)
+crossed$siteName <- as.factor(crossed$siteName)
+crossed$transectNumber_ <- as.factor(crossed$transectNumber_)
  
 ```
 
@@ -124,7 +124,7 @@ Crossed$transectNumber_ <- as.factor(Crossed$transectNumber_)
 
 These shapefiles were downloaded from the DBG ArcGIS projects. <https://researchdbg.maps.arcgis.com/home/item.html?id=00b0578b76e3472b9281525d06a6db00>
 
-```{r}
+```{r eval=FALSE, include=FALSE}
 shp_origins <- st_read("data_raw/SCGL_shapes/Sclerocactus_glaucus_DistanceSampling_OriginEndPoints.shp")
 shp_trans <- st_read("data_raw/SCGL_shapes/Sclerocactus_glaucus_DistanceSampling_Trasnsects.shp")
 
@@ -158,9 +158,9 @@ Picnic_shp <- ggplot(filter(shp_trans, site == "Picnic")) +
   labs(subtitle = "Picnic")
 
 
-ggsave(filename = "Fram_shp.png", plot = fram_shp)
-ggsave(filename = "Bridgeport_shp.png", plot = Bridgeport_shp)
-ggsave(filename = "Picnic_shp.png", plot = Picnic_shp)
+# ggsave(filename = "Fram_shp.png", plot = fram_shp)
+# ggsave(filename = "Bridgeport_shp.png", plot = Bridgeport_shp)
+# ggsave(filename = "Picnic_shp.png", plot = Picnic_shp)
 
 ```
 
@@ -176,27 +176,27 @@ The current data will be transformed into (x,y) based solely on the transect it 
 
 ```{r}
 # cleaning the names of columns to make scripting easier
-Crossed <- janitor::clean_names(Crossed)
+crossed <- janitor::clean_names(crossed)
 
 # Working on making the 'distance to group' be negative based on the 'direction to group'
 # test variable
-Crossed1 <- Crossed
+crossed1 <- crossed
 
-Crossed1 <- Crossed1 %>% 
+crossed1 <- crossed1 %>% 
    mutate( distance_to_group = case_when(direction_to_group == "-" ~ distance_to_group* -1, TRUE ~ distance_to_group ))
 
 # setting up the (X,Y) columns to then transform based on plot analysis
-Crossed1 <- Crossed1 %>% 
+crossed1 <- crossed1 %>% 
   mutate( x = case_when(transect_orientation == "NS" ~ distance_to_group, transect_orientation == "EW" ~ transect_meter_mark), 
           y = case_when(transect_orientation == "EW" ~ distance_to_group, transect_orientation == "NS" ~ transect_meter_mark))
 
  
 ```
 
-Working on transforming the Fram coordinates to play nice.
+#### Working on transforming the Fram coordinates to play nice.
 
 ```{r}
-Fram <- Crossed1 %>% 
+Fram <- crossed1 %>% 
   filter(site_name == 12)
 
 ```
@@ -248,9 +248,14 @@ Fram_test <- Fram %>%
                   transect_orientation == "EW" & transect_number == "7" ~ y + 70,
                   transect_orientation == "EW" & transect_number == "8" ~ y + 80,
                   transect_orientation == "EW" & transect_number == "9" ~ y + 90,
-                  TRUE ~ y)
+                  TRUE ~ y),
     )
 
+Fram_test <- Fram_test %>% 
+  mutate(
+    y = case_when(transect_orientation =="NS" ~ ((y - 100)* -1),
+                  TRUE ~ y)
+    )
 ```
 
 ```{r}
@@ -260,3 +265,136 @@ Fram_test %>%
             geom_point() +
   scale_y_continuous(breaks = c(10, 50, 70, 80, 90))+
   scale_x_continuous(breaks = c(10, 20, 30))
+
+```
+
+
+
+
+
+
+#### Working on '3'
+
+- EW 4 is made to have Y = 50 +/- [distance to group]. 
+- EW 3 is made to have Y= 40 +/- [distance to group] & X= 10+ [Transect meter mark].
+- EW 2 is made to have Y= 30 +/- distance to group & X= 10+[Transect meter mark].
+- EW 1 is made to have Y= 20 +/- distance to group & X= 20+[Transect meter mark].
+- NS 1 is made to have Y= 20 + [transect meter mark] & X= 20 +/- [distance to group]
+- NS 2 is made to have Y= ?? + [transect meter mark] & X= 30 +/- 
+
+NS1 = 40m
+NS2 = 66m
+NS3 = 50m
+EW4 = 50m
+EW3 = 60m
+Ew2 = 23m --- wrong
+EW1 = ??
+
+```{r}
+three <- crossed1 %>% 
+  filter(site_name == 3)
+
+# Transforming the coordinates to match the plot design, need to reanalyze the shapefile for correct distances
+three_test <- three %>% 
+  mutate( 
+    x = case_when(transect_orientation == "NS" & transect_number == "1" ~ x + 20, 
+                  transect_orientation == "NS" & transect_number == "2" ~ x + 30,
+                  transect_orientation == "NS" & transect_number == "3" ~ x + 40,
+                  transect_orientation == "EW" & transect_number == "1" ~ x + 20,
+                  transect_orientation == "EW" & transect_number == "2" ~ x + 10,
+                  transect_orientation == "EW" & transect_number == "3" ~ x + 10,
+                  transect_orientation == "EW" & transect_number == "4" ~ x
+                  ),
+    y = case_when(transect_orientation == "NS" & transect_number == "1" ~ y + 20, 
+                  transect_orientation == "NS" & transect_number == "2" ~ y + 10,
+                  transect_orientation == "NS" & transect_number == "3" ~ y ,
+                  transect_orientation == "EW" & transect_number == "1" ~ y + 20,
+                  transect_orientation == "EW" & transect_number == "2" ~ y + 30,
+                  transect_orientation == "EW" & transect_number == "3" ~ y + 40,
+                  transect_orientation == "EW" & transect_number == "4" ~ y + 50,
+                  ),
+    x = x * -1
+    )
+
+
+three_test %>% 
+  ggplot( mapping = aes( x = x, y = y, color = transect_orientation)) +
+  geom_point() +
+  geom_hline( yintercept = 40)
+```
+##fuzzy match 
+
+need to loop through NS observations and look for matching EW observations based on a fuzziness of the (x,y). 
+Ideally Going with fuzziness of 0.1m because any cactus within 10cm of another was considered part of the same group during the survey.
+Will play with fuzziness and see the crosses
+
+1. add Id's to NS.
+2. loop through each EW and compare to every NS
+3. add new ID to EWs if no match in NS
+4. add NS ID to EW if there is a match. 
+
+```{r}
+#Fram
+# FUZZY MATCH based on Michelle's fuzzy match for pepe
+# will need a nested forloop with a absolute value test 
+
+
+Fram_test <- mutate(Fram_test, plant_id = c(1:nrow(Fram_test)))
+   
+fram_ns <- filter(Fram_test, transect_orientation == "NS")
+fram_ew <- filter(Fram_test, transect_orientation == "EW")
+
+for (i in 1:nrow(fram_ns)){  #looping through every ns observation
+  
+
+  for (n in 1:nrow(fram_ew)){ #looping against every ew observation
+  
+if(
+  ( abs(fram_ns$x[i] - fram_ew$x[n]) <= 0.25 ) &  #Check for overlap, at 10cm only 1 observation.
+  abs(fram_ns$y[i] - fram_ew$y[n]) <= 0.25 ){
+  fram_ew$plant_id[n] <- fram_ns$plant_id[i]  #change the plant_id to match if overlap
+  }
+  } 
+}
+
+
+f_both <- fram_ns[which(fram_ns$plant_id %in% fram_ew$plant_id),] #storing the overlapping points
+
+#red points on graph are the overlapping observations. 
+Fram_test %>% 
+  ggplot( mapping = aes( x = x, y = y, alpha = 0.1)) +
+  geom_point( aes( colour = transect_orientation)) +
+  geom_point( data = f_both)
+       
+```
+
+```{r}
+three_test <- mutate(three_test, plant_id = c(1:nrow(three_test)))
+   
+three_ns <- filter(three_test, transect_orientation == "NS")
+three_ew <- filter(three_test, transect_orientation == "EW")
+
+for (i in 1:nrow(three_ns)){  #looping through every ns observation
+  
+
+  for (n in 1:nrow(three_ew)){ #looping against every ew observation
+  
+if(
+  ( abs(three_ns$x[i] - three_ew$x[n]) <= 0.25 ) &  #Check for overlap, at 10cm only 1 observation.
+  abs(three_ns$y[i] - three_ew$y[n]) <= 0.25 ){
+  three_ew$plant_id[n] <- three_ns$plant_id[i]  #change the plant_id to match if overlap
+  }
+  } 
+}
+
+
+three_both <- three_ns[which(three_ns$plant_id %in% three_ew$plant_id),] #storing the overlapping points
+
+#red points on graph are the overlapping observations. 
+three_test %>% 
+  ggplot( mapping = aes( x = x, y = y)) +
+  geom_point(aes( alpha = 0.1, colour = transect_orientation)) +
+  geom_point( data = three_both, aes())
+       
+```
+
