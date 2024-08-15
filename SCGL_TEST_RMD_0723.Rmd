@@ -130,7 +130,7 @@ shp_trans <- st_read("data_raw/SCGL_shapes/Sclerocactus_glaucus_DistanceSampling
 
 
 
-fram_shp <- ggplot(filter(shp_trans, site == "Fram")) +
+ ggplot(filter(shp_trans, site == "Fram")) +
   geom_sf()+
   geom_sf_label(aes(label = transectNu), size = 2) +
   theme(legend.position = "none", axis.text.x=element_blank(),
@@ -263,32 +263,22 @@ Fram_test %>%
   group_by(transect_orientation) %>% 
   ggplot(mapping = aes(x,y, color = Fram_test$transect_orientation)) +
             geom_point() +
-  scale_y_continuous(breaks = c(10, 50, 70, 80, 90))+
-  scale_x_continuous(breaks = c(10, 20, 30))
+  theme(aspect.ratio=1) 
+  
+  
 
 ```
 
-
-
-
-
-
 #### Working on '3'
 
-- EW 4 is made to have Y = 50 +/- [distance to group]. 
-- EW 3 is made to have Y= 40 +/- [distance to group] & X= 10+ [Transect meter mark].
-- EW 2 is made to have Y= 30 +/- distance to group & X= 10+[Transect meter mark].
-- EW 1 is made to have Y= 20 +/- distance to group & X= 20+[Transect meter mark].
-- NS 1 is made to have Y= 20 + [transect meter mark] & X= 20 +/- [distance to group]
-- NS 2 is made to have Y= ?? + [transect meter mark] & X= 30 +/- 
+-   EW 4 is made to have Y = 50 +/- [distance to group].
+-   EW 3 is made to have Y= 40 +/- [distance to group] & X= 10+ [Transect meter mark].
+-   EW 2 is made to have Y= 30 +/- distance to group & X= 10+[Transect meter mark].
+-   EW 1 is made to have Y= 20 +/- distance to group & X= 20+[Transect meter mark].
+-   NS 1 is made to have Y= 20 + [transect meter mark] & X= 20 +/- [distance to group]
+-   NS 2 is made to have Y= ?? + [transect meter mark] & X= 30 +/-
 
-NS1 = 40m
-NS2 = 66m
-NS3 = 50m
-EW4 = 50m
-EW3 = 60m
-Ew2 = 23m --- wrong
-EW1 = ??
+NS1 = 40m NS2 = 66m NS3 = 50m EW4 = 50m EW3 = 60m Ew2 = 23m --- wrong EW1 = ??
 
 ```{r}
 three <- crossed1 %>% 
@@ -316,22 +306,28 @@ three_test <- three %>%
     x = x * -1
     )
 
+three_seg <- tibble(
+  x = c(-20, -10, -10, 0, -20, -30, -40),
+  y = c( 20, 30, 40, 50, 20, 10, 0),
+  xend = c(-85, -70, -70, -50, -20, -30, -40),
+  yend = c(20, 30, 40, 50, 60, 76, 50)
+)
 
 three_test %>% 
-  ggplot( mapping = aes( x = x, y = y, color = transect_orientation)) +
+  ggplot(mapping = aes( x = x, y = y, color = transect_orientation)) +
+  theme(aspect.ratio = 1)+
   geom_point() +
-  geom_hline( yintercept = 40)
+  geom_segment( data = three_seg, x = three_seg$x, y = three_seg$y, xend = three_seg$xend, yend= three_seg$yend, aes(color = "red"))
 ```
-##fuzzy match 
 
-need to loop through NS observations and look for matching EW observations based on a fuzziness of the (x,y). 
-Ideally Going with fuzziness of 0.1m because any cactus within 10cm of another was considered part of the same group during the survey.
-Will play with fuzziness and see the crosses
+##fuzzy match
 
-1. add Id's to NS.
-2. loop through each EW and compare to every NS
-3. add new ID to EWs if no match in NS
-4. add NS ID to EW if there is a match. 
+need to loop through NS observations and look for matching EW observations based on a fuzziness of the (x,y). Ideally Going with fuzziness of 0.1m because any cactus within 10cm of another was considered part of the same group during the survey. Will play with fuzziness and see the crosses
+
+1.  add Id's to NS.
+2.  loop through each EW and compare to every NS
+3.  add new ID to EWs if no match in NS
+4.  add NS ID to EW if there is a match.
 
 ```{r}
 #Fram
@@ -350,8 +346,8 @@ for (i in 1:nrow(fram_ns)){  #looping through every ns observation
   for (n in 1:nrow(fram_ew)){ #looping against every ew observation
   
 if(
-  ( abs(fram_ns$x[i] - fram_ew$x[n]) <= 0.25 ) &  #Check for overlap, at 10cm only 1 observation.
-  abs(fram_ns$y[i] - fram_ew$y[n]) <= 0.25 ){
+  ( abs(fram_ns$x[i] - fram_ew$x[n]) <= 1 ) &  #Check for overlap, at 10cm only 1 observation.
+  abs(fram_ns$y[i] - fram_ew$y[n]) <= 1 ){
   fram_ew$plant_id[n] <- fram_ns$plant_id[i]  #change the plant_id to match if overlap
   }
   } 
@@ -394,7 +390,8 @@ three_both <- three_ns[which(three_ns$plant_id %in% three_ew$plant_id),] #storin
 three_test %>% 
   ggplot( mapping = aes( x = x, y = y)) +
   geom_point(aes( alpha = 0.1, colour = transect_orientation)) +
-  geom_point( data = three_both, aes())
+  geom_point( data = three_both, ) +
+  theme(aspect.ratio = 1 )+
+  geom_segment( data = three_seg, x = three_seg$x, y = three_seg$y, xend = three_seg$xend, yend= three_seg$yend)
        
 ```
-
