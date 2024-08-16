@@ -50,6 +50,7 @@ cactus <- scgl_obs %>%
   dplyr::select(`ObjectID`, `Transect Meter Mark`, `transectNumber_`, `transectOrientation`, `siteName`, `distBetweenTransects`, `Distance To Group`, `Direction To Group`)
 head(cactus)
 
+cactus <- clean_names(cactus)
 ```
 
 we can look at total number of cactus seen per site.
@@ -57,14 +58,14 @@ we can look at total number of cactus seen per site.
 ```{r}
 cactus %>% 
   group_by(siteName) %>% 
-  summarize(total = sum(!is.na(`Transect Meter Mark`)) )
+  summarize(total = sum(!is.na(transect_meter_mark)) )
 ```
 
 ```{r}
 cactus %>% 
-  mutate( transectOrientation = factor(transectOrientation)) %>% 
-  mutate( transectNumber_ = factor(transectNumber_)) %>% 
-  mutate( siteName = factor(siteName))
+  mutate( transect_orientation = factor(transect_orientation)) %>% 
+  mutate( transect_number_ = factor(transect_number)) %>% 
+  mutate( site_name = factor(site_name))
 ```
 
 Join the two dataframes to show the length of the transect that each cactus was observed on. Joins based on the ParentGlobalID of the cactus observation matching the GlobalID of the transect it was observed on.
@@ -97,14 +98,14 @@ intervals <- seq(from = 0, to = 100, by = 10)
 
 # Use a 'forloop' to filter cactus in the range we need. 
 
-crossed <- cactus %>% filter( between(`Transect Meter Mark`, 0, 0)  )
+crossed <- cactus %>% filter( between(transect_meter_mark, 0, 0)  )
 
 for( i in intervals){
   
- output <- filter(cactus, between(`Transect Meter Mark`, i-3, i+3)  )
+   output <- filter(cactus, between(transect_meter_mark, i-3, i+3)  )
 crossed <- rbind(crossed, output)
 }
-crossed <- filter(crossed, `Distance To Group` <= 4)
+crossed <- filter(crossed, distance_to_group <= 4)
 
 # 'crossed' now contains all cactus relevent to the analysis. 
 
@@ -115,8 +116,8 @@ nrow(crossed)
 Number of cactus observations within the 3 meter radius square from the interval crossings is 183 across all sites.
 
 ```{r}
-crossed$siteName <- as.factor(crossed$siteName)
-crossed$transectNumber_ <- as.factor(crossed$transectNumber_)
+crossed$site_name <- as.factor(crossed$site_name)
+crossed$transect_number <- as.factor(crossed$transect_number)
  
 ```
 
@@ -176,7 +177,7 @@ The current data will be transformed into (x,y) based solely on the transect it 
 
 ```{r}
 # cleaning the names of columns to make scripting easier
-crossed <- janitor::clean_names(crossed)
+
 
 # Working on making the 'distance to group' be negative based on the 'direction to group'
 # test variable
@@ -377,8 +378,8 @@ for (i in 1:nrow(three_ns)){  #looping through every ns observation
   
 if(
   ( abs(three_ns$x[i] - three_ew$x[n]) <= 0.25 ) &  #Check for overlap, at 10cm only 1 observation.
-  abs(three_ns$y[i] - three_ew$y[n]) <= 0.25 ){
-  three_ew$plant_id[n] <- three_ns$plant_id[i]  #change the plant_id to match if overlap
+    abs(three_ns$y[i] - three_ew$y[n]) <= 0.25 ){
+    three_ew$plant_id[n] <- three_ns$plant_id[i]  #change the plant_id to match if overlap
   }
   } 
 }
@@ -396,3 +397,82 @@ three_test %>%
        
 ```
 should be connected to GIT now
+
+
+Going to try and map the coords first and then filter to the intersections. Might have differernt results
+```{r mappping first, filter second}
+# 'cactus' contains relevant info and all observations
+cactus <- clean_names(cactus)
+
+cactus <- cactus %>% 
+    mutate( x = case_when(transect_orientation == "NS" ~ distance_to_group, transect_orientation == "EW" ~ transect_meter_mark), 
+          y = case_when(transect_orientation == "EW" ~ distance_to_group, transect_orientation == "NS" ~ transect_meter_mark))
+
+picnic <- cactus %>% 
+  filter( site_name == "3") 
+  
+
+ pic_coord <-  picnic %>% 
+   mutate( 
+    x = case_when(transect_orientation == "NS" & transect_number == "1" ~ x + 20, 
+                  transect_orientation == "NS" & transect_number == "2" ~ x + 30,
+                  transect_orientation == "NS" & transect_number == "3" ~ x + 40,
+                  transect_orientation == "EW" & transect_number == "1" ~ x + 20,
+                  transect_orientation == "EW" & transect_number == "2" ~ x + 10,
+                  transect_orientation == "EW" & transect_number == "3" ~ x + 10,
+                  transect_orientation == "EW" & transect_number == "4" ~ x
+                  ),
+    y = case_when(transect_orientation == "NS" & transect_number == "1" ~ y + 20, 
+                  transect_orientation == "NS" & transect_number == "2" ~ y + 10,
+                  transect_orientation == "NS" & transect_number == "3" ~ y ,
+                  transect_orientation == "EW" & transect_number == "1" ~ y + 20,
+                  transect_orientation == "EW" & transect_number == "2" ~ y + 30,
+                  transect_orientation == "EW" & transect_number == "3" ~ y + 40,
+                  transect_orientation == "EW" & transect_number == "4" ~ y + 50,
+                  ),
+    x = x * -1
+    )
+
+pic_coord1 <- mutate(pic_coord, plant_id = c(1:nrow(pic_coord)))
+   
+pic_ns <- filter(pic_coord1, transect_orientation == "NS")
+pic_ew <- filter(pic_coord1, transect_orientation == "EW")
+
+for (i in 1:nrow(pic_ns)){  #looping through every ns observation
+  
+  for (n in 1:nrow(pic_ew)){ #looping against every ew observation
+  
+if(
+  ( isTRUE( abs(pic_ns$x[i] - pic_ew$x[n] ) <= .5 ) ) &
+  ( isTRUE( abs(pic_ns$y[i] - pic_ew$y[n] ) <= .5 ) )
+  ){
+    pic_ew$plant_id[n] <- pic_ns$plant_id[i]  #change the plant_id to match if overlap
+  }
+  }
+  }
+
+pic_coord1 %>% 
+   filter(abs(x)<100, abs(y)<100) %>%
+  ggplot( mapping = aes( x = x, y = y)) +
+  geom_point(aes( alpha = 0.1, colour = "blue")) +
+  geom_point(data =  pic_ns[which(pic_ns$plant_id %in% pic_ew$plant_id),], aes(colour = "black")) +
+  geom_point(data = pic_ew[which(pic_ew$plant_id %in% pic_ns$plant_id),], aes(colour = "black")) + 
+  geom_point( data = three_test, aes( alpha = 0.1, colour = "orange")) +
+  theme(aspect.ratio = 1 )+
+  geom_segment( data = three_seg, x = three_seg$x, y = three_seg$y, xend = three_seg$xend, yend= three_seg$yend)
+
+
+pic_coord1 %>% 
+   filter(abs(x)<100, abs(y)<100) %>%
+  ggplot( mapping = aes( x = x, y = y)) +
+  geom_point(aes( alpha = 0.1, colour = "blue")) +
+  geom_point( data = three_test, aes( alpha = 0.1, colour = "orange")) +
+  theme(aspect.ratio = 1 )+
+  geom_segment( data = three_seg, x = three_seg$x, y = three_seg$y, xend = three_seg$xend, yend= three_seg$yend)
+ 
+ pic_coord %>% 
+   filter(abs(x)<100, abs(y)<100) %>% 
+   ggplot( mapping = aes( x = x , y = y, colour = transect_orientation))+
+   geom_point()
+```
+The plot created mapping the "pic_coord" is overlapped with the "three_test" which is supposed to be the same data. The points are wildly different, so something has gone wrong in the manipulation. Possible points of failure are in the 'direction_to_group' transformation to the x,y coords, the transformation of the coords to be put on a coord grid based on the plot design, or possibly in the filtering of observations to be within the 3m square crossed zone. 
