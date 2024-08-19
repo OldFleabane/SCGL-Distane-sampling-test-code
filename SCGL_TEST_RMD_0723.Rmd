@@ -23,6 +23,7 @@ library(tidyverse)
 library(dplyr)
 library(sf)
 library(raster)
+library(janitor)
 ```
 
 There are 3 associated .csv files.
@@ -57,7 +58,7 @@ we can look at total number of cactus seen per site.
 
 ```{r}
 cactus %>% 
-  group_by(siteName) %>% 
+  group_by(site_name) %>% 
   summarize(total = sum(!is.na(transect_meter_mark)) )
 ```
 
@@ -455,24 +456,25 @@ pic_coord1 %>%
    filter(abs(x)<100, abs(y)<100) %>%
   ggplot( mapping = aes( x = x, y = y)) +
   geom_point(aes( alpha = 0.1, colour = "blue")) +
-  geom_point(data =  pic_ns[which(pic_ns$plant_id %in% pic_ew$plant_id),], aes(colour = "black")) +
-  geom_point(data = pic_ew[which(pic_ew$plant_id %in% pic_ns$plant_id),], aes(colour = "black")) + 
+  geom_point(data =  pic_ns[which(pic_ns$plant_id %in% pic_ew$plant_id),], aes(colour = "black")) + #overlapped points
+  geom_point(data = pic_ew[which(pic_ew$plant_id %in% pic_ns$plant_id),], aes(colour = "black")) +  #overlapped points
   geom_point( data = three_test, aes( alpha = 0.1, colour = "orange")) +
   theme(aspect.ratio = 1 )+
   geom_segment( data = three_seg, x = three_seg$x, y = three_seg$y, xend = three_seg$xend, yend= three_seg$yend)
 
 
+
+#just overlapping picnic points with the three_test points. Should be the same
 pic_coord1 %>% 
    filter(abs(x)<100, abs(y)<100) %>%
   ggplot( mapping = aes( x = x, y = y)) +
-  geom_point(aes( alpha = 0.1, colour = "blue")) +
-  geom_point( data = three_test, aes( alpha = 0.1, colour = "orange")) +
+  geom_point(alpha = 0.8, colour = "pink") +
+  geom_point( data = three_test, alpha = 0.8, colour = "skyblue") +
   theme(aspect.ratio = 1 )+
-  geom_segment( data = three_seg, x = three_seg$x, y = three_seg$y, xend = three_seg$xend, yend= three_seg$yend)
+  geom_segment( data = three_seg, x = three_seg$x, y = three_seg$y, xend = three_seg$xend, yend= three_seg$yend) 
  
- pic_coord %>% 
-   filter(abs(x)<100, abs(y)<100) %>% 
-   ggplot( mapping = aes( x = x , y = y, colour = transect_orientation))+
-   geom_point()
+ 
+  
+
 ```
 The plot created mapping the "pic_coord" is overlapped with the "three_test" which is supposed to be the same data. The points are wildly different, so something has gone wrong in the manipulation. Possible points of failure are in the 'direction_to_group' transformation to the x,y coords, the transformation of the coords to be put on a coord grid based on the plot design, or possibly in the filtering of observations to be within the 3m square crossed zone. 
