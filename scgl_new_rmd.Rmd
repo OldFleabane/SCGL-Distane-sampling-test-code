@@ -1,0 +1,267 @@
+---
+title: "SecondTryScGl"
+author: "Jonathan Amegin"
+date: "2024-08-16"
+output: html_document
+---
+
+# SCGL Distance Sampling data analysis
+
+A test project cleaning and analyzing the Distance Sampling data collected on the Sclerocactus glauca (SCGL) trip
+
+End goals:
+
+-   Plot the individual observations for each site on a coordinate grid
+-   Mark the observations which overlap/were observed both going NS & EW.
+-   Get a percent observational error to apply across the observed population.
+
+Site name: 3, 1= picnic, 10= bridgport, 12= Fram
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+# tidyverse contains both 'dyplr' and 'ggplot2'
+library(tidyverse)
+library(dplyr)
+library(janitor)
+library(ggrepel)
+
+scgl_obs <- read_csv("data_raw/distanceSampling_1.csv")
+scgl_trans_length <- read_csv("data_raw/transect_2.csv")
+
+scgl_obs <- clean_names(scgl_obs)
+```
+
+```{r}
+clean_length <- scgl_trans_length %>% 
+  dplyr::select(GlobalID, `Transect Number`,`Transect Direction`,`Transect Length`)
+
+joined_scgl <- left_join(scgl_obs, clean_length, join_by ("parent_global_id"=="GlobalID"), relationship = "many-to-one")
+```
+
+```{r}
+scgl <- scgl_obs[!(is.na(scgl_obs$transect_meter_mark|scgl_obs$distance_to_group)),] %>% #filtering NA's and outliers. 
+        filter(transect_meter_mark < 110, distance_to_group < 10) %>% 
+        mutate( object_id = as.factor(object_id),
+                site_name = as.factor(site_name),
+                transect_number = as.factor(transect_number))
+
+# making the 'direction to group' indicate if the 'distance to group' needs to be left/right of transect.              
+scgl1 <- scgl %>% 
+   mutate(  transect_meter_mark = case_when(transect_orientation == "EW" ~ transect_meter_mark * -1, TRUE ~ transect_meter_mark),
+              distance_to_group = case_when(direction_to_group == "-" ~ distance_to_group * -1, TRUE ~ distance_to_group ) 
+          )
+           
+
+# setting up the (X,Y) columns to then transform based on plot analysis
+scgl1 <- scgl1 %>% 
+  mutate( x = case_when(transect_orientation == "NS" ~ distance_to_group, transect_orientation == "EW" ~ transect_meter_mark), 
+          y = case_when(transect_orientation == "EW" ~ distance_to_group, transect_orientation == "NS" ~ transect_meter_mark)) 
+                
+                
+
+fram <- scgl1 %>% 
+  filter(site_name == "12")
+
+picnic <- scgl1 %>% 
+  filter(site_name == "1"| site_name == "3")
+
+bridge <- scgl1 %>% 
+  filter(site_name == "10")
+
+
+
+```
+
+
+```{r test function eval=FALSE, include=FALSE}
+
+#trying out a custom function
+crossed <- function(a, b){
+for (i in which(a$transect_orientation == "NS")){  #looping through every ns observation
+  
+
+  for (n in which(a$transect_orientation == "EW")){ #looping against every ew observation
+  
+if(
+  ( abs(a[i,'x'] - a[n,'x']) <= b ) & 
+    abs(a[i,'y'] - a[n,'y']) <= b ){
+    a[i, 'plant_id'] <- a[n, 'plant_id']
+  }
+  } 
+}
+}
+```
+
+
+note: 5EW might be at 55m not 50m, based on shapefile.
+
+Fram
+```{r fram transform}
+#transforming Fram coordinates to accurately reflect plot design. 
+fram_1 <- fram %>% 
+  mutate( 
+    x = case_when(transect_orientation == "NS" & transect_number == "1" ~ x - 10, 
+                  transect_orientation == "NS" & transect_number == "2" ~ x - 20,
+                  transect_orientation == "NS" & transect_number == "3" ~ x - 30,
+                  transect_orientation == "EW" & transect_number == "5" ~ x - 10,
+                  TRUE ~ x
+                  ),
+    y = case_when(transect_orientation == "EW" & transect_number == "1" ~ y + 10,
+                  transect_orientation == "EW" & transect_number == "5" ~ y + 50,
+                  transect_orientation == "EW" & transect_number == "7" ~ y + 70,
+                  transect_orientation == "EW" & transect_number == "8" ~ y + 80,
+                  transect_orientation == "EW" & transect_number == "9" ~ y + 90,
+                  TRUE ~ y),
+    )
+
+#Fram NS lines read backwards making 0 = 100. 
+fram_1 <- fram_1 %>% 
+  mutate(
+    y = case_when(transect_orientation =="NS" ~ ((y - 100)* -1),
+                  TRUE ~ y) )
+
+#transect start/stops for mapping
+fram_lines <- tibble( x = c(-10, -20, -30, 0, -10, 0, 0, 0), y = c(0, 0, 0, 10, 50, 70, 80, 90), 
+                      xend = c(-10, -20, -30, -33, -33, -60, -65, -39), yend = c(100, 100, 100, 10, 50, 70, 80, 90)
+                    )
+
+
+ fram_plot<-  ggplot( data = fram_1, mapping = aes(x = x, y = y)) +
+  geom_point() +
+  geom_segment(data = fram_lines, aes(x = x, y = y, xend = xend, yend = yend)) 
+
+  
+  fram_plot +
+    geom_point(data = fram_1, aes( colour = transect_orientation))+
+    coord_fixed(ratio = 1, xlim = c(-75, 10), ylim = c(0, 100))
+```
+
+```{r fram dupes and plot}
+fram_id <- mutate(fram_1, plant_id = c(1:nrow(fram_1)))
+   
+
+for (i in which(fram_id$transect_orientation == "NS")){  #looping through every ns observation
+  
+
+  for (n in which(fram_id$transect_orientation == "EW")){ #looping against every ew observation
+  
+if(
+  ( abs(fram_id[i,'x'] - fram_id[n,'x']) <= 0.5 ) & 
+    abs(fram_id[i,'y'] - fram_id[n,'y']) <= 0.5 ){
+    fram_id[i, 'plant_id'] <- fram_id[n, 'plant_id']
+  }
+  } 
+}
+
+fram_plot1 <- fram_id %>% 
+  filter( duplicated(plant_id)) %>% 
+  ggplot( mapping = aes( x = x, y = y)) +
+  geom_point(color = "blue",) +
+  geom_point(data = fram_id, shape = 1, aes( color = transect_orientation) ) +
+  geom_segment(data = fram_lines, aes(x = x, y = y, xend = xend, yend = yend)) +
+  coord_fixed(ratio = 1, xlim = c(-75, 10), ylim = c(0, 100)) 
+  
+
+fram_plot1  
+
+ # geom_text( data = fram_id, aes( label = plant_id), size = 3)  #use to find plant
+  
+```
+
+
+Picnic
+```{r picnic transform and plot}
+
+#describing the plot design
+pic_lines <- tibble( x = c(-20, -30, -40, -20, -10, -10, 0), 
+                     y = c(20, 10, 0, 20, 30, 40, 50), 
+                     xend = c(-20, -30, -40, -90, -70, -70, -50),
+                     yend = c(60, 76, 50, 20, 30, 40, 50),
+                     label = c("1NS", "2NS", "3NS", "1EW", "2EW", "3EW", "4EW"))
+                
+ picnic_1 <-  picnic %>% 
+   mutate( 
+    x = case_when(transect_orientation == "NS" & transect_number == "1" ~ x - 20, 
+                  transect_orientation == "NS" & transect_number == "2" ~ x - 30,
+                  transect_orientation == "NS" & transect_number == "3" ~ x - 40,
+                  transect_orientation == "EW" & transect_number == "1" ~ x - 20,
+                  transect_orientation == "EW" & transect_number == "2" ~ x - 10,
+                  transect_orientation == "EW" & transect_number == "3" ~ x - 10,
+                  transect_orientation == "EW" & transect_number == "4" ~ x
+                  ),
+    y = case_when(transect_orientation == "NS" & transect_number == "1" ~ y + 20, 
+                  transect_orientation == "NS" & transect_number == "2" ~ y + 10,
+                  transect_orientation == "NS" & transect_number == "3" ~ y ,
+                  transect_orientation == "EW" & transect_number == "1" ~ y + 20,
+                  transect_orientation == "EW" & transect_number == "2" ~ y + 30,
+                  transect_orientation == "EW" & transect_number == "3" ~ y + 40,
+                  transect_orientation == "EW" & transect_number == "4" ~ y + 50,
+                  )
+   )
+
+
+
+picnic_id <- mutate(picnic_1, plant_id = c(1:nrow(picnic_1)))
+   
+
+for (i in which(picnic_id$transect_orientation == "NS")){  #looping through every ns observation
+  
+  for (n in which(picnic_id$transect_orientation == "EW")){ #looping against every ew observation
+  
+if(
+  ( abs(picnic_id[i,'x'] - picnic_id[n,'x']) <= 0.5 ) & 
+    abs(picnic_id[i,'y'] - picnic_id[n,'y']) <= 0.5 ){
+    picnic_id[i, 'plant_id'] <- picnic_id[n, 'plant_id']
+  }
+  } 
+}
+
+
+
+pic_plot<-  picnic_id %>% 
+  ggplot( mapping = aes(x = x, y = y)) +
+  geom_point(aes(color = transect_orientation), shape = 1) +
+  geom_segment(data = pic_lines, aes(x = x, y = y, xend = xend, yend = yend))
+     
+pic_plot + 
+  geom_point(data = filter(picnic_id, duplicated(plant_id))) +
+  geom_text_repel(data = pic_lines,
+            aes( label = label),
+            size = 3,
+            )
+
+```
+
+
+Bridgeport
+```{r}
+#Describing Bridgeport design
+bridge_lines <- tibble(x =
+                        y = 
+                         xend =
+                         yend =)
+
+#transforming Bridgeport points to match design
+ bridge_1 <-  bridge %>% 
+   mutate( 
+    x = case_when(transect_orientation == "NS" & transect_number == "1" ~ x - 20, 
+                  transect_orientation == "NS" & transect_number == "2" ~ x - 30,
+                  transect_orientation == "NS" & transect_number == "3" ~ x - 40,
+                  transect_orientation == "EW" & transect_number == "1" ~ x - 20,
+                  transect_orientation == "EW" & transect_number == "2" ~ x - 10,
+                  transect_orientation == "EW" & transect_number == "3" ~ x - 10,
+                  transect_orientation == "EW" & transect_number == "4" ~ x
+                  ),
+    y = case_when(transect_orientation == "NS" & transect_number == "1" ~ y + 20, 
+                  transect_orientation == "NS" & transect_number == "2" ~ y + 10,
+                  transect_orientation == "NS" & transect_number == "3" ~ y ,
+                  transect_orientation == "EW" & transect_number == "1" ~ y + 20,
+                  transect_orientation == "EW" & transect_number == "2" ~ y + 30,
+                  transect_orientation == "EW" & transect_number == "3" ~ y + 40,
+                  transect_orientation == "EW" & transect_number == "4" ~ y + 50,
+                  )
+   )
+
+
+
+```
+
