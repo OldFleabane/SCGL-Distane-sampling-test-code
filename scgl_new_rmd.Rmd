@@ -15,7 +15,7 @@ End goals:
 -   Mark the observations which overlap/were observed both going NS & EW.
 -   Get a percent observational error to apply across the observed population.
 
-Site name: 3, 1= picnic, 10= bridgport, 12= Fram
+Site names: 3 & 1= Picnic, 10= Bridgport, 12= Fram
 
 ```{r message=FALSE, warning=FALSE, include=FALSE}
 # tidyverse contains both 'dyplr' and 'ggplot2'
@@ -31,11 +31,16 @@ scgl_obs <- clean_names(scgl_obs)
 ```
 
 ```{r}
+#used for looking at transect length
 clean_length <- scgl_trans_length %>% 
   dplyr::select(GlobalID, `Transect Number`,`Transect Direction`,`Transect Length`)
 
 joined_scgl <- left_join(scgl_obs, clean_length, join_by ("parent_global_id"=="GlobalID"), relationship = "many-to-one")
 ```
+
+Raw data needs to be made into a coordinate-grid-friendly format. Each site needs to have the coordinates transformed based on the layout of the transects on the plot.
+
+The shapefiles were downloaded and measured based on transect length and distance-between-transects data.
 
 ```{r}
 scgl <- scgl_obs[!(is.na(scgl_obs$transect_meter_mark|scgl_obs$distance_to_group)),] %>% #filtering NA's and outliers. 
@@ -46,8 +51,13 @@ scgl <- scgl_obs[!(is.na(scgl_obs$transect_meter_mark|scgl_obs$distance_to_group
 
 # making the 'direction to group' indicate if the 'distance to group' needs to be left/right of transect.              
 scgl1 <- scgl %>% 
-   mutate(  transect_meter_mark = case_when(transect_orientation == "EW" ~ transect_meter_mark * -1, TRUE ~ transect_meter_mark),
-              distance_to_group = case_when(direction_to_group == "-" ~ distance_to_group * -1, TRUE ~ distance_to_group ) 
+   mutate(
+    transect_meter_mark = case_when( 
+      transect_orientation == "EW" ~ transect_meter_mark * -1, 
+      TRUE ~ transect_meter_mark),
+    distance_to_group = case_when(
+      direction_to_group == "-" ~ distance_to_group * -1, 
+      TRUE ~ distance_to_group ) 
           )
            
 
@@ -71,30 +81,48 @@ bridge <- scgl1 %>%
 
 ```
 
-
 ```{r test function eval=FALSE, include=FALSE}
 
 #trying out a custom function
-crossed <- function(a, b){
-for (i in which(a$transect_orientation == "NS")){  #looping through every ns observation
+crossed <- function(a, b){ 
+  temp <- a
+for (i in which(temp$transect_orientation == "NS")){  #looping through every ns observation
   
-
-  for (n in which(a$transect_orientation == "EW")){ #looping against every ew observation
+  for (n in which(temp$transect_orientation == "EW")){ #looping against every ew observation
   
 if(
-  ( abs(a[i,'x'] - a[n,'x']) <= b ) & 
-    abs(a[i,'y'] - a[n,'y']) <= b ){
-    a[i, 'plant_id'] <- a[n, 'plant_id']
+  ( abs(temp[i,'x'] - temp[n,'x']) <= b ) & 
+    abs(temp[i,'y'] - temp[n,'y']) <= b ){
+    temp[i, 'plant_id'] <- temp[n, 'plant_id']
   }
   } 
 }
 }
 ```
 
+```{r function for cross zone, eval=FALSE, include=FALSE}
+# Use a 'forloop' to filter cactus in the range we need. 
 
-note: 5EW might be at 55m not 50m, based on shapefile.
+three_meter <- function (site){
+  
+  temp_site <- filter(site, between(transect_meter_mark, 0, 0))
+  
+  for (i in  seq(from = 0, to = 100, by = 10)){
+    temp_cross <- filter(temp_site, between( transect_meter_mark, i-3, i+3))
+    temp_site <- rbind(temp_site, temp_cross)
+  
+  } 
+  temp_site <- filter(temp_site, distance_to_group <= 3)
+  
+  temp_site
+  
+}
 
-Fram
+
+```
+
+Fram coordinate transformations to match plot design
+
 ```{r fram transform}
 #transforming Fram coordinates to accurately reflect plot design. 
 fram_1 <- fram %>% 
@@ -120,8 +148,10 @@ fram_1 <- fram_1 %>%
                   TRUE ~ y) )
 
 #transect start/stops for mapping
-fram_lines <- tibble( x = c(-10, -20, -30, 0, -10, 0, 0, 0), y = c(0, 0, 0, 10, 50, 70, 80, 90), 
-                      xend = c(-10, -20, -30, -33, -33, -60, -65, -39), yend = c(100, 100, 100, 10, 50, 70, 80, 90)
+fram_lines <- tibble( x = c(-10, -20, -30, 0, -10, 0, 0, 0), 
+                      y = c(0, 0, 0, 10, 50, 70, 80, 90), 
+                      xend = c(-10, -20, -30, -33, -33, -60, -65, -39), 
+                      yend = c(100, 100, 100, 10, 50, 70, 80, 90)
                     )
 
 
@@ -134,6 +164,8 @@ fram_lines <- tibble( x = c(-10, -20, -30, 0, -10, 0, 0, 0), y = c(0, 0, 0, 10, 
     geom_point(data = fram_1, aes( colour = transect_orientation))+
     coord_fixed(ratio = 1, xlim = c(-75, 10), ylim = c(0, 100))
 ```
+
+Now the observations on the NS transects need to be compared to the observations on the EW to find the double-observations.
 
 ```{r fram dupes and plot}
 fram_id <- mutate(fram_1, plant_id = c(1:nrow(fram_1)))
@@ -163,12 +195,39 @@ fram_plot1 <- fram_id %>%
 
 fram_plot1  
 
+
  # geom_text( data = fram_id, aes( label = plant_id), size = 3)  #use to find plant
   
 ```
 
+```{r fram cross sectioned}
 
-Picnic
+# Use a 'forloop' to filter cactus in the range we need. 
+
+fram_crossed <- fram_id %>% filter( between(transect_meter_mark, 0, 0)  )
+
+for( i in seq(from = 0, to = 100, by = 10)){
+  
+   output <- filter(fram_id, between(transect_meter_mark, i-3, i+3)  )
+fram_crossed <- rbind(fram_crossed, output)
+}
+fram_crossed <- filter(fram_crossed, distance_to_group <= 3)
+
+rm(output)
+
+
+#should be the corrected number of observations. 
+print( paste("Corrected number based on observational error from crossed observations =", nrow(fram_id) / (nrow(filter(fram_id, duplicated(plant_id))  ) / nrow(fram_crossed)) , sep = " ")) 
+
+
+```
+
+Actual seen cactus at Fram = 82.
+
+Corrected number based on observational error from crossed observations = **184.5**
+
+**Picnic**
+
 ```{r picnic transform and plot}
 
 #describing the plot design
@@ -231,9 +290,32 @@ pic_plot +
 
 ```
 
+```{r picnic crossed sectioned}
+pic_crossed <- picnic_id %>% filter( between(transect_meter_mark, 0, 0)  )
 
-Bridgeport
-```{r}
+for( i in seq(from = 0, to = 100, by = 10)){
+  
+   output <- filter(picnic_id, between(transect_meter_mark, i-3, i+3)  )
+pic_crossed <- rbind(pic_crossed, output)
+}
+pic_crossed <- filter(pic_crossed, distance_to_group <= 3)
+
+rm(output)
+
+
+#should be the corrected number of observations. 
+print( paste("Corrected number based on observational error from crossed observations =", nrow(picnic_id) / (nrow(filter(picnic_id, duplicated(plant_id))  ) / nrow(pic_crossed)) , sep = " ")) 
+```
+
+Actual number of cactus seen at Picnic: **224**
+
+Picnic corrected number based on observational error from crossed observations = **1306.66666666667**
+
+------------------------------------------------------------------------
+
+*Bridgeport. Having issues with the shape file matching the transect lengths recorded. Might need to reevaluate or scrap.*
+
+```{r bridge eval=FALSE, include=FALSE}
 #Describing Bridgeport design
 bridge_lines <- tibble(x =
                         y = 
@@ -261,7 +343,22 @@ bridge_lines <- tibble(x =
                   )
    )
 
-
+ 
+b_lengths <- joined_scgl %>%
+  filter(site_name == "10")
 
 ```
 
+```{r}
+
+```
+
+------------------------------------------------------------------------
+
+Notes:
+
+May try filtering all observations to be within 3 meters at the crossings before looking for duplicates to make sure the logic is correct.
+
+Large clustering at Picnic, need to go through raw data and look for possible errors.
+
+Having accurate shapefiles or descriptions of plot design is key.
