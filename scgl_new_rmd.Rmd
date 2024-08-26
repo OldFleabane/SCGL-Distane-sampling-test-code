@@ -281,7 +281,7 @@ pic_plot<-  picnic_id %>%
   geom_point(aes(color = transect_orientation), shape = 1) +
   geom_segment(data = pic_lines, aes(x = x, y = y, xend = xend, yend = yend))
      
-pic_plot + 
+pic_plot1 <- pic_plot + 
   geom_point(data = filter(picnic_id, duplicated(plant_id))) +
   geom_text_repel(data = pic_lines,
             aes( label = label),
@@ -349,8 +349,37 @@ b_lengths <- joined_scgl %>%
 
 ```
 
-```{r}
 
+## NS vs EW
+```{r}
+compare_scgl <- tibble( counts = c("NS_count", "EW_count", "NS_EW", "cross_count"), 
+                        fram = c(nrow(filter(fram_id, transect_orientation == "NS")), 
+                                 nrow(filter(fram_id, transect_orientation == "EW")),
+                                 nrow(fram_id),
+                                 ((nrow(fram_id))/ (nrow(filter(fram_id, duplicated(plant_id))  ) / nrow(fram_crossed)))
+                        ),
+                        picnic = c(nrow(filter(picnic_id, transect_orientation == "NS")), 
+                                 nrow(filter(picnic_id, transect_orientation == "EW")),
+                                 nrow(picnic_id),
+                                 ((nrow(picnic_id))/ (nrow(filter(picnic_id, duplicated(plant_id))  ) / nrow(pic_crossed)))
+                        )
+)
+                                 
+  compare_scgl <- pivot_longer(compare_scgl, cols = c(fram, picnic), names_to = "site")                               
+                                 
+                       
+nrow(filter(picnic_id, transect_orientation == "NS")) / nrow(picnic_id)
+nrow(filter(picnic_id, transect_orientation == "EW"))/ nrow(picnic_id)
+
+nrow(filter(fram_id, transect_orientation == "NS")) / nrow(fram_id)
+nrow(filter(fram_id, transect_orientation == "EW"))/ nrow(fram_id)
+
+
+compare_scgl %>% 
+  ggplot( mapping = aes(counts, value)) +
+  geom_col(aes(color = site), position = "dodge") 
+
+  
 ```
 
 ------------------------------------------------------------------------
