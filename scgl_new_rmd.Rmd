@@ -288,6 +288,8 @@ pic_plot1 <- pic_plot +
             size = 3,
             )
 
+
+
 ```
 
 ```{r picnic crossed sectioned}
@@ -375,11 +377,50 @@ nrow(filter(fram_id, transect_orientation == "NS")) / nrow(fram_id)
 nrow(filter(fram_id, transect_orientation == "EW"))/ nrow(fram_id)
 
 
-compare_scgl %>% 
-  ggplot( mapping = aes(counts, value)) +
-  geom_col(aes(color = site), position = "dodge") 
+compare_plot <- compare_scgl %>% 
+  ggplot( mapping = aes(site, value)) +
+  geom_col(aes(color = counts), position = "dodge") +
+  geom_text(label = compare_scgl$value)
+  labs(title = "Comparisons of count calculations") 
 
+  compare_plot
+```
+
+
+
+
+
+```{r}
+
+pic_group <- picnic_id %>% 
+  mutate( group_total = rowSums(across(starts_with("number")), na.rm = TRUE))
+
+
+
+pic_group %>% 
+  ggplot( mapping = aes(x = x, y = y)) +
+  geom_point(data = pic_group, shape = (pic_group$group_total + 48), aes(color = pic_group$transect_orientation), size = 3) +
+  geom_segment(data = pic_lines, aes(x = x, y = y, xend = xend, yend = yend)) + 
+  geom_point(data = filter(picnic_id, duplicated(plant_id)), shape = 0) +
+  geom_text_repel(data = pic_lines,
+            aes( label = label),
+            size = 3
+            )
+               
+
+
+fram_group <- fram_id %>% 
+  mutate( group_total = rowSums(across(starts_with("number")), na.rm = TRUE))
+
+
+
+fram_group %>% 
+  ggplot( mapping = aes(x = x, y = y)) +
+  geom_point(data = fram_group, shape = (fram_group$group_total + 48), aes(color = fram_group$transect_orientation), size = 3) +
+  geom_segment(data = fram_lines, aes(x = x, y = y, xend = xend, yend = yend)) + 
+  geom_point(data = filter(fram_group, duplicated(plant_id)), shape = 0) 
   
+
 ```
 
 ------------------------------------------------------------------------
