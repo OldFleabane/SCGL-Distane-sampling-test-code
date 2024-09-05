@@ -368,7 +368,10 @@ compare_scgl <- tibble( counts = c("NS_count", "EW_count", "NS_EW", "cross_count
 )
                                  
   compare_scgl <- pivot_longer(compare_scgl, cols = c(fram, picnic), names_to = "site")                               
-                                 
+   
+  compare_scgl <- compare_scgl %>% 
+  add_row(counts = "group total", site = "fram", value = sum(fram_group$group_total)) %>% 
+  add_row(counts = "group total", site = "picnic", value = sum(pic_group$group_total))                              
                        
 nrow(filter(picnic_id, transect_orientation == "NS")) / nrow(picnic_id)
 nrow(filter(picnic_id, transect_orientation == "EW"))/ nrow(picnic_id)
@@ -380,12 +383,26 @@ nrow(filter(fram_id, transect_orientation == "EW"))/ nrow(fram_id)
 compare_plot <- compare_scgl %>% 
   ggplot( mapping = aes(site, value)) +
   geom_col(aes(color = counts), position = "dodge") +
-  geom_text(label = compare_scgl$value)
+  geom_text(label = compare_scgl$value) +
   labs(title = "Comparisons of count calculations") 
+  
 
   compare_plot
-```
 
+  
+```
+Possible that large difference in the picnic orientation counts due to large grouping being counted as individuals in one direction and as groups in the other. 
+```{r}
+compare_scgl %>% 
+  add_row(counts = "EW group total", site = "picnic", value = sum(select(filter(pic_group, transect_orientation == "EW"), group_total))) %>%
+  add_row(counts = "NS group total", site = "picnic", value = sum(select(filter(pic_group, transect_orientation == "NS"), group_total)))  %>%   ggplot( mapping = aes(site, value)) +
+  geom_col(aes(color = counts), position = "dodge") +
+  labs(title = "Comparisons of count calculations") 
+  
+                       
+
+
+```
 
 
 
@@ -421,6 +438,23 @@ fram_group %>%
   geom_point(data = filter(fram_group, duplicated(plant_id)), shape = 0) 
   
 
+```
+
+
+
+Checking the coordinates for the Picnic EW observations to ensure that they are all distinct individuals and not mistaken groups. 
+```{r}
+picnic_EW_check <- mutate(picnic_id, ew_id = c(1:nrow(picnic_id)))
+   
+
+for (i in which(picnic_EW_check$transect_orientation == "EW")){  #looping through every EW observation
+  
+if(
+  ( abs(picnic_EW_check[i,'x'] - picnic_EW_check[i+1,'x']) <= .1 ) & 
+  ( abs(picnic_EW_check[i,'y'] - picnic_EW_check[i+1,'y']) <= .1 )){
+    picnic_EW_check[i, 'ew_id'] <- picnic_EW_check[n, 'ew_id']
+  }
+}
 ```
 
 ------------------------------------------------------------------------
