@@ -226,6 +226,18 @@ Actual seen cactus at Fram = 82.
 
 Corrected number based on observational error from crossed observations = **184.5**
 
+
+Need to apply observation correction to NS & EW separately and then get the average. 
+```{r}
+#  error comes from the number if plants were seen going NS AND EW divided by number if plants seen going NS OR EW 
+#  within the 3 meter crossing zone
+ob_error_fram <- (nrow(filter(fram_id, duplicated(plant_id))  ) / nrow(fram_crossed))
+
+mean( c(n_distinct(which(fram_id$transect_orientation == "NS")) / ob_error_fram,
+        n_distinct(which(fram_id$transect_orientation == "EW")) / ob_error_fram))
+```
+NEW Corrected number based on observational error from crossed observations = **92.25**
+
 **Picnic**
 
 ```{r picnic transform and plot}
@@ -312,6 +324,16 @@ print( paste("Corrected number based on observational error from crossed observa
 Actual number of cactus seen at Picnic: **224**
 
 Picnic corrected number based on observational error from crossed observations = **1306.66666666667**
+
+
+```{r}
+ob_error_pic <- (nrow(filter(picnic_id, duplicated(plant_id))  ) / nrow(pic_crossed))
+
+mean( c(n_distinct(which(picnic_id$transect_orientation == "NS")) / ob_error_pic,
+        n_distinct(which(picnic_id$transect_orientation == "EW")) / ob_error_pic))
+```
+NEW Picnic corrected number based on observational error from crossed observations = **653.3333**
+
 
 ------------------------------------------------------------------------
 
