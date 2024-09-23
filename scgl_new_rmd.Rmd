@@ -81,7 +81,7 @@ bridge <- scgl1 %>%
 
 ```
 
-```{r test function eval=FALSE, include=FALSE}
+```{r include=FALSE, test function eval=FALSE}
 
 #trying out a custom function
 crossed <- function(a, b){ 
@@ -96,14 +96,16 @@ if(
     temp[i, 'plant_id'] <- temp[n, 'plant_id']
   }
   } 
+  }
+  temp
 }
-}
+
 ```
 
 ```{r function for cross zone, eval=FALSE, include=FALSE}
 # Use a 'forloop' to filter cactus in the range we need. 
 
-three_meter <- function (site){
+three_meter <- function(site){
   
   temp_site <- filter(site, between(transect_meter_mark, 0, 0))
   
@@ -184,6 +186,8 @@ if(
   } 
 }
 
+fram_id <- crossed(fram_id, 0.5)
+
 fram_plot1 <- fram_id %>% 
   filter( duplicated(plant_id)) %>% 
   ggplot( mapping = aes( x = x, y = y)) +
@@ -226,8 +230,8 @@ Actual seen cactus at Fram = 82.
 
 Corrected number based on observational error from crossed observations = **184.5**
 
+Need to apply observation correction to NS & EW separately and then get the average.
 
-Need to apply observation correction to NS & EW separately and then get the average. 
 ```{r}
 #  error comes from the number if plants were seen going NS AND EW divided by number if plants seen going NS OR EW 
 #  within the 3 meter crossing zone
@@ -236,7 +240,8 @@ ob_error_fram <- (nrow(filter(fram_id, duplicated(plant_id))  ) / nrow(fram_cros
 mean( c(n_distinct(which(fram_id$transect_orientation == "NS")) / ob_error_fram,
         n_distinct(which(fram_id$transect_orientation == "EW")) / ob_error_fram))
 ```
-NEW Corrected number based on observational error from crossed observations = **92.25**
+
+NEW Corrected number based on observational error applied separately to NS & EW and then averaged = **92.25**
 
 **Picnic**
 
@@ -325,15 +330,14 @@ Actual number of cactus seen at Picnic: **224**
 
 Picnic corrected number based on observational error from crossed observations = **1306.66666666667**
 
-
 ```{r}
 ob_error_pic <- (nrow(filter(picnic_id, duplicated(plant_id))  ) / nrow(pic_crossed))
 
 mean( c(n_distinct(which(picnic_id$transect_orientation == "NS")) / ob_error_pic,
         n_distinct(which(picnic_id$transect_orientation == "EW")) / ob_error_pic))
 ```
-NEW Picnic corrected number based on observational error from crossed observations = **653.3333**
 
+NEW Picnic corrected number based on observational error applied separately to NS & EW and then averaged = **653.3333**
 
 ------------------------------------------------------------------------
 
@@ -373,8 +377,8 @@ b_lengths <- joined_scgl %>%
 
 ```
 
-
 ## NS vs EW
+
 ```{r}
 compare_scgl <- tibble( counts = c("NS_count", "EW_count", "NS_EW", "cross_count"), 
                         fram = c(nrow(filter(fram_id, transect_orientation == "NS")), 
@@ -413,7 +417,9 @@ compare_plot <- compare_scgl %>%
 
   
 ```
-Possible that large difference in the picnic orientation counts due to large grouping being counted as individuals in one direction and as groups in the other. 
+
+Possible that large difference in the picnic orientation counts due to large grouping being counted as individuals in one direction and as groups in the other.
+
 ```{r}
 compare_scgl %>% 
   add_row(counts = "EW group total", site = "picnic", value = sum(select(filter(pic_group, transect_orientation == "EW"), group_total))) %>%
@@ -425,9 +431,6 @@ compare_scgl %>%
 
 
 ```
-
-
-
 
 ```{r}
 
@@ -462,9 +465,8 @@ fram_group %>%
 
 ```
 
+Checking the coordinates for the Picnic EW observations to ensure that they are all distinct individuals and not mistaken groups.
 
-
-Checking the coordinates for the Picnic EW observations to ensure that they are all distinct individuals and not mistaken groups. 
 ```{r}
 picnic_EW_check <- mutate(picnic_id, ew_id = c(1:nrow(picnic_id)))
    
