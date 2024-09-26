@@ -53,10 +53,6 @@ if(
 
 ```
 
-Raw data needs to be made into a coordinate-grid-friendly format. Each site needs to have the coordinates transformed based on the layout of the transects on the plot.
-
-The shapefiles were downloaded and measured based on transect length and distance-between-transects data.
-
 ```{r}
 scgl <- scgl_obs[!(is.na(scgl_obs$transect_meter_mark|scgl_obs$distance_to_group)),] %>% #filtering NA's and outliers. 
         filter(transect_meter_mark < 110, distance_to_group < 10) %>% 
@@ -93,6 +89,8 @@ bridge <- scgl1 %>%
   filter(site_name == "10")
 
 ```
+
+The raw data needs to be made into a coordinate-grid-friendly format. Each site needs to have the coordinates transformed based on the layout of the transects on the plot.These layouts were recorded via shapefile, so the shapefile was measured and compared to recorded information to figure out the necessary transformations to the data.
 
 ## Site 12: Fram
 
@@ -144,6 +142,8 @@ fram_lines <- tibble( x = c(-10, -20, -30, 0, -10, 0, 0, 0),
 
 ### Marking Overlap
 
+For the initial marking of overlapping points we will use a **fuzziness of 0.5cm.**
+
 ```{r fram dupes and plot}
 fram_id <- mutate(fram_1, plant_id = c(1:nrow(fram_1)))
    
@@ -176,17 +176,32 @@ Use a loop to filter down to only cactus that *should* have been seen both going
 ```{r fram cross sectioned}
 
 # Use a 'forloop' to filter cactus in the range we need. 
-
 fram_crossed <- fram_id %>% filter( between(transect_meter_mark, 0, 0)  )
+fram_crossed_ns <- fram_id %>% filter( between(transect_meter_mark, 0, 0)  )
+fram_crossed_ew <- fram_id %>% filter( between(transect_meter_mark, 0, 0)  )
 
-for( i in seq(from = 0, to = 100, by = 10)){
+for( i in c(10, 50, 70, 80, 90)){
   
-   output <- filter(fram_id, between(abs(transect_meter_mark), i-3, i+3)  )
-    fram_crossed <- rbind(fram_crossed, output)
+   output <- filter(fram_id, between(y, i-3, i+3) &  transect_orientation == "NS")
+    fram_crossed_ns <- rbind(fram_crossed_ns, output)
 }
-    fram_crossed <- filter(fram_crossed, abs(distance_to_group) <= 3)
+    
+for( i in c(-10, -20, -30)){
+  
+   output <- filter(fram_id, between(x, i-3, i+3) &  transect_orientation == "EW")
+    fram_crossed_ew <- rbind(fram_crossed_ew, output)
+}
+
+    fram_crossed <- fram_crossed%>% 
+      rbind(fram_crossed_ew) %>%
+      rbind(fram_crossed_ns) %>% 
+      filter(abs(distance_to_group) <= 3)
+    
 
 rm(output)
+
+
+#Because the lines were not evenly placed, the observations need to be filter again to only the actual crossed zones
 
 
 #  error comes from the number if plants were seen going NS AND EW divided by number if plants seen going NS OR EW within the 3 meter crossing zone
@@ -204,11 +219,13 @@ print( paste("Corrected number of observations =",
 
 ```
 
+### Changing fuzziness
+
 ```{r}
 
 #make a curve that shows how the number of corrected observations changes as you change the fuzziness
 
-fram_fuzz <- tibble( fuzziness = c(seq(0.05, 3, by = 0.05)))
+fram_fuzz <- tibble( fuzziness = c(seq(0.0, 3, by = 0.1)))
  fram_fuzz <-  fram_fuzz %>% 
     mutate( error = numeric(nrow(fram_fuzz)), 
             n_duplicated = numeric(nrow(fram_fuzz)),
@@ -221,7 +238,7 @@ fram_fuzz <- tibble( fuzziness = c(seq(0.05, 3, by = 0.05)))
 
 for (fuzz in fram_fuzz$fuzziness){
   
-fram_crazy <- fram_id
+fram_crazy <- mutate(fram_1, plant_id = c(1:nrow(fram_1)))
 
 for (i in which(fram_crazy$transect_orientation == "NS")){  #looping through every ns observation
   
@@ -252,19 +269,127 @@ fram_fuzz <- fram_fuzz %>%
 ```
 
 ```{r}
-ggplot(fram_fuzz[-1, ]) +
-  geom_line(mapping = aes( x = fuzziness, y = n_duplicated), color = "blue") +
-  geom_line(mapping = aes( x = fuzziness, y = n_corrected), color = "darkgreen") +
-  geom_line(mapping = aes( x = fuzziness, y = n_actual), color = "orange") 
+  
+pivot_longer(fram_fuzz, cols = !fuzziness, names_to= "type", values_to= "count") %>% 
+  group_by(type) %>% 
+  ggplot( aes(fuzziness, count, color = type))+
+  geom_line() +
+  labs( x = "Fuzziness (m)")
+
   
 
 
 ```
-```{r}
-ggplot( data = fram_crossed, mapping = aes(x = x, y = y)) +
-  geom_point() +
-  geom_segment(data = fram_lines, aes(x = x, y = y, xend = xend, yend = yend))  +
-    geom_point(data = fram_crossed, aes( colour = transect_orientation))+
-    coord_fixed(ratio = 1, xlim = c(-75, 10), ylim = c(0, 100))
+
+This chart shows the change in the calculated number of *overlapping*, *unique*, and *corrected* total observations as the fuzziness is increased from 0m to 3m.
+
+## Picnic
+
+### Plotting individuals
+
+Involves transforming the coordinates to match the plot design.
+
+```{r picnic transform and plot}
+
+#describing the plot design
+pic_lines <- tibble( x = c(-20, -30, -40, -20, -10, -10, 0), 
+                     y = c(20, 10, 0, 20, 30, 40, 50), 
+                     xend = c(-20, -30, -40, -90, -70, -70, -50),
+                     yend = c(60, 76, 50, 20, 30, 40, 50),
+                     label = c("1NS", "2NS", "3NS", "1EW", "2EW", "3EW", "4EW"))
+                
+ picnic_1 <-  picnic %>% 
+   mutate( 
+    x = case_when(transect_orientation == "NS" & transect_number == "1" ~ x - 20, 
+                  transect_orientation == "NS" & transect_number == "2" ~ x - 30,
+                  transect_orientation == "NS" & transect_number == "3" ~ x - 40,
+                  transect_orientation == "EW" & transect_number == "1" ~ x - 20,
+                  transect_orientation == "EW" & transect_number == "2" ~ x - 10,
+                  transect_orientation == "EW" & transect_number == "3" ~ x - 10,
+                  transect_orientation == "EW" & transect_number == "4" ~ x
+                  ),
+    y = case_when(transect_orientation == "NS" & transect_number == "1" ~ y + 20, 
+                  transect_orientation == "NS" & transect_number == "2" ~ y + 10,
+                  transect_orientation == "NS" & transect_number == "3" ~ y ,
+                  transect_orientation == "EW" & transect_number == "1" ~ y + 20,
+                  transect_orientation == "EW" & transect_number == "2" ~ y + 30,
+                  transect_orientation == "EW" & transect_number == "3" ~ y + 40,
+                  transect_orientation == "EW" & transect_number == "4" ~ y + 50,
+                  )
+   )
+ 
+pic_plot <-  picnic_1 %>% 
+  ggplot( mapping = aes(x = x, y = y)) +
+  geom_point(aes(color = transect_orientation), shape = 1) +
+  geom_segment(data = pic_lines, aes(x = x, y = y, xend = xend, yend = yend))
+pic_plot
+
 ```
 
+### Marking Overlap
+
+```{r}
+picnic_id <- mutate(picnic_1, plant_id = c(1:nrow(picnic_1)))
+
+picnic_id <- crossed(picnic_id, 0.5)
+
+pic_plot1 <- pic_plot + 
+  geom_point(data = filter(picnic_id, duplicated(plant_id))) +
+  geom_text_repel(data = pic_lines,
+            aes( label = label),
+            size = 3,
+            )
+pic_plot1
+
+```
+
+### Observational Error
+
+```{r}
+# Use a 'forloop' to filter cactus in the range we need. 
+picnic_crossed <- picnic_id %>% filter( between(transect_meter_mark, 0, 0)  )
+picnic_crossed_ns <- picnic_id %>% filter( between(transect_meter_mark, 0, 0)  )
+picnic_crossed_ew <- picnic_id %>% filter( between(transect_meter_mark, 0, 0)  )
+
+for( i in c(20, 30, 40, 50)){
+  
+   output <- filter(picnic_id, between(y, i-3, i+3) &  transect_orientation == "NS")
+    picnic_crossed_ns <- rbind(picnic_crossed_ns, output)
+}
+    
+for( i in c(-20, -30, -40)){
+  
+   output <- filter(picnic_id, between(x, i-3, i+3) &  transect_orientation == "EW")
+    picnic_crossed_ew <- rbind(picnic_crossed_ew, output)
+}
+
+    picnic_crossed <- picnic_crossed%>% 
+      rbind(picnic_crossed_ew) %>%
+      rbind(picnic_crossed_ns) %>% 
+      filter(abs(distance_to_group) <= 3)
+    
+
+rm(output)
+
+ob_error_picnic <- (nrow(filter(picnic_id, duplicated(plant_id))) / nrow(picnic_crossed))
+
+
+picnic_crossed %>%
+  ggplot( mapping = aes(x = x, y = y)) +
+  geom_point(aes(color = transect_orientation), shape = 1) +
+  geom_segment(data = pic_lines, aes(x = x, y = y, xend = xend, yend = yend)) +
+  geom_point(data = filter(picnic_crossed, duplicated(plant_id))) +
+  geom_text_repel(data = pic_lines,
+            aes( label = label),
+            size = 3,)
+```
+
+```{r echo=FALSE}
+
+print(paste("Observational error =", ob_error_picnic, sep = " "))
+print(paste("Actual number of unique cactus = ", n_distinct(picnic_id$plant_id), sep = " " ))
+#should be the corrected number of observations. 
+print( paste("Corrected number of observations =", 
+             mean( c(n_distinct(which(picnic_id$transect_orientation == "NS")) /           ob_error_picnic, n_distinct(which(picnic_id$transect_orientation == "EW")) /           ob_error_picnic)) , sep = " ")) 
+
+```

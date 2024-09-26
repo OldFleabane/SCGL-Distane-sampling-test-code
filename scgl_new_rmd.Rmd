@@ -179,14 +179,13 @@ for (i in which(fram_id$transect_orientation == "NS")){  #looping through every 
   for (n in which(fram_id$transect_orientation == "EW")){ #looping against every ew observation
   
 if(
-  ( abs(fram_id[i,'x'] - fram_id[n,'x']) <= 0.5 ) & 
-    abs(fram_id[i,'y'] - fram_id[n,'y']) <= 0.5 ){
+  ( abs(fram_id[i,'x'] - fram_id[n,'x']) <= 0.05 ) & 
+    abs(fram_id[i,'y'] - fram_id[n,'y']) <= 0.05 ){
     fram_id[i, 'plant_id'] <- fram_id[n, 'plant_id']
   }
   } 
 }
 
-fram_id <- crossed(fram_id, 0.5)
 
 fram_plot1 <- fram_id %>% 
   filter( duplicated(plant_id)) %>% 
@@ -490,3 +489,63 @@ May try filtering all observations to be within 3 meters at the crossings before
 Large clustering at Picnic, need to go through raw data and look for possible errors.
 
 Having accurate shapefiles or descriptions of plot design is key.
+
+
+```{r}
+
+#make a curve that shows how the number of corrected observations changes as you change the fuzziness
+
+fram_fuzz <- tibble( fuzziness =c(seq(0.05, 3, by = 0.05)))
+ fram_fuzz <-  fram_fuzz %>% 
+    mutate( error = numeric(nrow(fram_fuzz)), 
+            n_duplicated = numeric(nrow(fram_fuzz)),
+            n_actual = numeric(nrow(fram_fuzz)), 
+            n_corrected = numeric(nrow(fram_fuzz))
+    )
+    
+
+
+
+for (fuzz in fram_fuzz$fuzziness){
+  
+fram_crazy <- fram_id
+
+for (i in which(fram_crazy$transect_orientation == "NS")){  #looping through every ns observation
+  
+
+  for (n in which(fram_crazy$transect_orientation == "EW")){ #looping against every ew observation
+  
+if(
+  ( abs(fram_crazy[i,'x'] - fram_crazy[n,'x']) <= fuzz ) & 
+    abs(fram_crazy[i,'y'] - fram_crazy[n,'y']) <= fuzz ){
+    fram_crazy[i, 'plant_id'] <- fram_crazy[n, 'plant_id']
+  }
+  } 
+} 
+
+
+fram_fuzz <- fram_fuzz %>% 
+  mutate( error = ifelse(fuzziness == fuzz, (nrow(filter(fram_crazy, duplicated(plant_id))) / nrow(fram_crossed)), error),
+          n_duplicated = ifelse(fuzziness == fuzz, sum(duplicated(fram_crazy$plant_id)), n_duplicated),
+          n_actual = ifelse(fuzziness == fuzz, n_distinct(fram_crazy$plant_id), n_actual)
+  ) 
+
+fram_fuzz <- fram_fuzz %>% 
+  mutate( n_corrected = ifelse(fuzziness == fuzz, mean( c(n_distinct(which(fram_crazy$transect_orientation == "NS"))/with(fram_fuzz, error[ fuzziness == fuzz] ), n_distinct(which(fram_crazy$transect_orientation == "EW"))/with(fram_fuzz, error[ fuzziness == fuzz] ))), n_corrected))
+
+}
+ 
+ 
+```
+
+```{r}
+ggplot(fram_fuzz[-1, ]) +
+  geom_line(mapping = aes( x = fuzziness, y = n_duplicated), color = "blue") +
+  geom_line(mapping = aes( x = fuzziness, y = n_corrected), color = "darkgreen") +
+  geom_line(mapping = aes( x = fuzziness, y = n_actual), color = "orange") 
+  
+
+
+```
+
+
