@@ -393,3 +393,53 @@ print( paste("Corrected number of observations =",
              mean( c(n_distinct(which(picnic_id$transect_orientation == "NS")) /           ob_error_picnic, n_distinct(which(picnic_id$transect_orientation == "EW")) /           ob_error_picnic)) , sep = " ")) 
 
 ```
+### Changing Fuziness
+
+
+```{r}
+start <- Sys.time()
+#make a curve that shows how the number of corrected observations changes as you change the fuzziness
+
+picnic_fuzz <- tibble( fuzziness = c(seq(0, 1, by = 0.1)))
+ picnic_fuzz <-  picnic_fuzz %>% 
+    mutate( error = numeric(nrow(picnic_fuzz)), 
+            n_duplicated = numeric(nrow(picnic_fuzz)),
+            n_actual = numeric(nrow(picnic_fuzz)), 
+            n_corrected = numeric(nrow(picnic_fuzz))
+    )
+    
+
+
+
+for (fuzz in picnic_fuzz$fuzziness){
+  
+ 
+  
+picnic_crazy <- mutate(picnic_1, plant_id = c(1:nrow(picnic_1)))
+
+for (i in which(picnic_crazy$transect_orientation == "NS")){  #looping through every ns observation
+  
+
+  for (n in which(picnic_crazy$transect_orientation == "EW")){ #looping against every ew observation
+  
+if(
+  ( abs(picnic_crazy[i,'x'] - picnic_crazy[n,'x']) <= fuzz ) & 
+    abs(picnic_crazy[i,'y'] - picnic_crazy[n,'y']) <= fuzz ){
+    picnic_crazy[i, 'plant_id'] <- picnic_crazy[n, 'plant_id']
+  }
+  }
+  
+}
+    picnic_fuzz[which(as.character(picnic_fuzz$fuzziness) == as.character(fuzz)), "error"] <- (nrow(filter(picnic_crazy, duplicated(plant_id))) / nrow(picnic_crossed))
+
+    picnic_fuzz[which(as.character(picnic_fuzz$fuzziness) == as.character(fuzz)), "n_duplicated"] <- sum(duplicated(picnic_crazy$plant_id))
+    
+    picnic_fuzz[which(as.character(picnic_fuzz$fuzziness) == as.character(fuzz)), "n_actual"] <- n_distinct(picnic_crazy$plant_id)
+    
+    picnic_fuzz[which(as.character(picnic_fuzz$fuzziness) == as.character(fuzz)), "n_corrected"] <- mean( c(n_distinct(which(picnic_crazy$transect_orientation == "NS"))/with(picnic_fuzz, error[ fuzziness == fuzz] ), n_distinct(which(picnic_crazy$transect_orientation == "EW"))/with(picnic_fuzz, error[ fuzziness == fuzz] )))
+
+}
+stop <- Sys.time()
+time2 <- stop - start
+ 
+```
