@@ -1,0 +1,270 @@
+---
+title: "Final 2024 SCGL Distance Script"
+author: "Jonathan Amegin"
+date: "2024-09-24"
+output: html_document
+---
+
+# [Sclerocactus Distance Sampling]{.underline}
+
+End goals:
+
+-   Plot the individual observations for each site on a coordinate grid
+-   Mark the observations which overlap/were observed both going NS & EW.
+-   Get a percent observational error to apply across the observed population.
+
+Site names: 3 & 1= Picnic, 10= Bridgport, 12= Fram
+
+## Setting Up
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+# tidyverse contains both 'dyplr' and 'ggplot2'
+library(tidyverse)
+library(dplyr)
+library(janitor)
+library(ggrepel)
+
+scgl_obs <- read_csv("data_raw/distanceSampling_1.csv")
+scgl_trans_length <- read_csv("data_raw/transect_2.csv")
+
+scgl_obs <- clean_names(scgl_obs)
+```
+
+This function will be used later to find duplicate plants
+
+```{r test function}
+
+#trying out a custom function
+crossed <- function(a, b){ 
+  temp <- a
+for (i in which(temp$transect_orientation == "NS")){  #looping through every ns observation
+  
+  for (n in which(temp$transect_orientation == "EW")){ #looping against every ew observation
+  
+if(
+  ( abs(temp[i,'x'] - temp[n,'x']) <= b ) & 
+    abs(temp[i,'y'] - temp[n,'y']) <= b ){
+    temp[i, 'plant_id'] <- temp[n, 'plant_id']
+  }
+  } 
+  }
+  temp
+}
+
+```
+
+Raw data needs to be made into a coordinate-grid-friendly format. Each site needs to have the coordinates transformed based on the layout of the transects on the plot.
+
+The shapefiles were downloaded and measured based on transect length and distance-between-transects data.
+
+```{r}
+scgl <- scgl_obs[!(is.na(scgl_obs$transect_meter_mark|scgl_obs$distance_to_group)),] %>% #filtering NA's and outliers. 
+        filter(transect_meter_mark < 110, distance_to_group < 10) %>% 
+        mutate( object_id = as.factor(object_id),
+                site_name = as.factor(site_name),
+                transect_number = as.factor(transect_number))
+
+# making the 'direction to group' indicate if the 'distance to group' needs to be left/right of transect.              
+scgl1 <- scgl %>% 
+   mutate(
+    transect_meter_mark = case_when( 
+      transect_orientation == "EW" ~ transect_meter_mark * -1, 
+      TRUE ~ transect_meter_mark),
+    distance_to_group = case_when(
+      direction_to_group == "-" ~ distance_to_group * -1, 
+      TRUE ~ distance_to_group ) 
+          )
+           
+
+# setting up the (X,Y) columns to then transform based on plot analysis
+scgl1 <- scgl1 %>% 
+  mutate( x = case_when(transect_orientation == "NS" ~ distance_to_group, transect_orientation == "EW" ~ transect_meter_mark), 
+          y = case_when(transect_orientation == "EW" ~ distance_to_group, transect_orientation == "NS" ~ transect_meter_mark)) 
+                
+                
+#filtering to site
+fram <- scgl1 %>% 
+  filter(site_name == "12")
+
+picnic <- scgl1 %>% 
+  filter(site_name == "1"| site_name == "3")
+
+bridge <- scgl1 %>% 
+  filter(site_name == "10")
+
+```
+
+## Site 12: Fram
+
+### Plotting individuals
+
+Involves transforming the coordinates to match the plot design.
+
+```{r fram transform}
+#transforming Fram coordinates to accurately reflect plot design. 
+fram_1 <- fram %>% 
+  mutate( 
+    x = case_when(transect_orientation == "NS" & transect_number == "1" ~ x - 10, 
+                  transect_orientation == "NS" & transect_number == "2" ~ x - 20,
+                  transect_orientation == "NS" & transect_number == "3" ~ x - 30,
+                  transect_orientation == "EW" & transect_number == "5" ~ x - 10,
+                  TRUE ~ x
+                  ),
+    y = case_when(transect_orientation == "EW" & transect_number == "1" ~ y + 10,
+                  transect_orientation == "EW" & transect_number == "5" ~ y + 50,
+                  transect_orientation == "EW" & transect_number == "7" ~ y + 70,
+                  transect_orientation == "EW" & transect_number == "8" ~ y + 80,
+                  transect_orientation == "EW" & transect_number == "9" ~ y + 90,
+                  TRUE ~ y),
+    )
+
+#Fram NS lines read backwards making 0 = 100. 
+fram_1 <- fram_1 %>% 
+  mutate(
+    y = case_when(transect_orientation =="NS" ~ ((y - 100)* -1),
+                  TRUE ~ y) )
+
+#transect start/stops for mapping
+fram_lines <- tibble( x = c(-10, -20, -30, 0, -10, 0, 0, 0), 
+                      y = c(0, 0, 0, 10, 50, 70, 80, 90), 
+                      xend = c(-10, -20, -30, -33, -33, -60, -65, -39), 
+                      yend = c(100, 100, 100, 10, 50, 70, 80, 90)
+                    )
+
+
+ fram_plot<-  ggplot( data = fram_1, mapping = aes(x = x, y = y)) +
+  geom_point() +
+  geom_segment(data = fram_lines, aes(x = x, y = y, xend = xend, yend = yend)) 
+
+  
+  fram_plot +
+    geom_point(data = fram_1, aes( colour = transect_orientation))+
+    coord_fixed(ratio = 1, xlim = c(-75, 10), ylim = c(0, 100))
+```
+
+### Marking Overlap
+
+```{r fram dupes and plot}
+fram_id <- mutate(fram_1, plant_id = c(1:nrow(fram_1)))
+   
+fram_id <- crossed(fram_id, .5)  # a = plot data w/ID's, b = fuzziness
+
+fram_plot1 <- fram_id %>% 
+  filter( duplicated(plant_id)) %>% 
+  ggplot( mapping = aes( x = x, y = y)) +
+  geom_point(color = "blue",) +
+  geom_point(data = fram_id, shape = 1, aes( color = transect_orientation) ) +
+  geom_segment(data = fram_lines, aes(x = x, y = y, xend = xend, yend = yend)) +
+  coord_fixed(ratio = 1, xlim = c(-75, 10), ylim = c(0, 100)) 
+  
+ # geom_text( data = fram_id, aes( label = plant_id), size = 3)  
+ # Use this add-on to display plant ID's alongside points
+
+fram_plot1  
+
+
+
+  
+```
+
+Dark blue points are overlapping observations based on fuzziness provided in the `crossed()` function
+
+### Observational Error
+
+Use a loop to filter down to only cactus that *should* have been seen both going EW & NS. The Observational Error calculated will be applied separately to NS & EW actual observations and then averaged together. This is meant to avoid double counting of overlapping observations.
+
+```{r fram cross sectioned}
+
+# Use a 'forloop' to filter cactus in the range we need. 
+
+fram_crossed <- fram_id %>% filter( between(transect_meter_mark, 0, 0)  )
+
+for( i in seq(from = 0, to = 100, by = 10)){
+  
+   output <- filter(fram_id, between(abs(transect_meter_mark), i-3, i+3)  )
+    fram_crossed <- rbind(fram_crossed, output)
+}
+    fram_crossed <- filter(fram_crossed, abs(distance_to_group) <= 3)
+
+rm(output)
+
+
+#  error comes from the number if plants were seen going NS AND EW divided by number if plants seen going NS OR EW within the 3 meter crossing zone
+
+ob_error_fram <- (nrow(filter(fram_id, duplicated(plant_id))) / nrow(fram_crossed))
+```
+
+```{r echo=FALSE}
+print(paste("Observational error =", ob_error_fram, sep = " "))
+print(paste("Actual number of unique cactus = ", n_distinct(fram_id$plant_id), sep = " " ))
+#should be the corrected number of observations. 
+print( paste("Corrected number of observations =", 
+             mean( c(n_distinct(which(fram_id$transect_orientation == "NS")) /           ob_error_fram, n_distinct(which(fram_id$transect_orientation == "EW")) /           ob_error_fram)) , sep = " ")) 
+
+
+```
+
+```{r}
+
+#make a curve that shows how the number of corrected observations changes as you change the fuzziness
+
+fram_fuzz <- tibble( fuzziness = c(seq(0.05, 3, by = 0.05)))
+ fram_fuzz <-  fram_fuzz %>% 
+    mutate( error = numeric(nrow(fram_fuzz)), 
+            n_duplicated = numeric(nrow(fram_fuzz)),
+            n_actual = numeric(nrow(fram_fuzz)), 
+            n_corrected = numeric(nrow(fram_fuzz))
+    )
+    
+
+
+
+for (fuzz in fram_fuzz$fuzziness){
+  
+fram_crazy <- fram_id
+
+for (i in which(fram_crazy$transect_orientation == "NS")){  #looping through every ns observation
+  
+
+  for (n in which(fram_crazy$transect_orientation == "EW")){ #looping against every ew observation
+  
+if(
+  ( abs(fram_crazy[i,'x'] - fram_crazy[n,'x']) <= fuzz ) & 
+    abs(fram_crazy[i,'y'] - fram_crazy[n,'y']) <= fuzz ){
+    fram_crazy[i, 'plant_id'] <- fram_crazy[n, 'plant_id']
+  }
+  } 
+} 
+
+
+fram_fuzz <- fram_fuzz %>% 
+  mutate( error = ifelse(fuzziness == fuzz, (nrow(filter(fram_crazy, duplicated(plant_id))) / nrow(fram_crossed)), error),
+          n_duplicated = ifelse(fuzziness == fuzz, sum(duplicated(fram_crazy$plant_id)), n_duplicated),
+          n_actual = ifelse(fuzziness == fuzz, n_distinct(fram_crazy$plant_id), n_actual)
+  ) 
+
+fram_fuzz <- fram_fuzz %>% 
+  mutate( n_corrected = ifelse(fuzziness == fuzz, mean( c(n_distinct(which(fram_crazy$transect_orientation == "NS"))/with(fram_fuzz, error[ fuzziness == fuzz] ), n_distinct(which(fram_crazy$transect_orientation == "EW"))/with(fram_fuzz, error[ fuzziness == fuzz] ))), n_corrected))
+
+}
+ 
+ 
+```
+
+```{r}
+ggplot(fram_fuzz[-1, ]) +
+  geom_line(mapping = aes( x = fuzziness, y = n_duplicated), color = "blue") +
+  geom_line(mapping = aes( x = fuzziness, y = n_corrected), color = "darkgreen") +
+  geom_line(mapping = aes( x = fuzziness, y = n_actual), color = "orange") 
+  
+
+
+```
+```{r}
+ggplot( data = fram_crossed, mapping = aes(x = x, y = y)) +
+  geom_point() +
+  geom_segment(data = fram_lines, aes(x = x, y = y, xend = xend, yend = yend))  +
+    geom_point(data = fram_crossed, aes( colour = transect_orientation))+
+    coord_fixed(ratio = 1, xlim = c(-75, 10), ylim = c(0, 100))
+```
+
