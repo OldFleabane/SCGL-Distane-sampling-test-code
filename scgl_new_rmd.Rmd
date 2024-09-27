@@ -596,22 +596,79 @@ ggplot(fram_fuzz[-1, ]) +
 
 ```{r}
 
-test_duping1 <- expand_grid(NS_X = picnic_id[which( picnic_id$transect_orientation == "NS"), "x"]$x, 
-              EW_X = picnic_id[which( picnic_id$transect_orientation == "EW"), "x"]$x) %>% 
-  add_column(
-  expand_grid(NS_Y = picnic_id[which( picnic_id$transect_orientation == "NS"), "y"]$y, 
-              EW_Y = picnic_id[which( picnic_id$transect_orientation == "EW"), "y"]$y)) %>%
-  filter(abs(NS_X - EW_X) <= 0.5 & abs(NS_Y - EW_Y) <= 0.5)
+duping <- function(site, b){
 
-picnic_id[which(sapply(c(picnic_id$x), FUN = function(x)x %in% c(test_duping1$NS_X )) & 
-                sapply(c(picnic_id$y), FUN = function(x)x %in% c(test_duping1$NS_Y )) ), ]
+test_duping1 <- expand_grid(NS_X = site[which( site$transect_orientation == "NS"), "x"]$x, 
+                            EW_X = site[which( site$transect_orientation == "EW"), "x"]$x) %>% 
+  add_column(
+                expand_grid(NS_Y = site[which( site$transect_orientation == "NS"), "y"]$y, 
+                            EW_Y = site[which( site$transect_orientation == "EW"), "y"]$y)) %>%
+  filter(abs(NS_X - EW_X) <= b & abs(NS_Y - EW_Y) <= b)
+  
+site[which((sapply(c(site$x), FUN = function(x)x %in% c(test_duping1$EW_X )) & 
+            sapply(c(site$y), FUN = function(x)x %in% c(test_duping1$EW_Y )))|
+           (sapply(c(site$x), FUN = function(x)x %in% c(test_duping1$NS_X )) & 
+            sapply(c(site$y), FUN = function(x)x %in% c(test_duping1$NS_Y )) )
+                ),]
+}
+
+
+duping(fram_id, .5)
+
+
+
+
+fram_duped <- duping(fram_id, .5)
+mutate(fram_duped, plant_id = case_when( abs))
+
+
+```
+```{r}
+duping1 <- function(site, b){
+
+test <- expand_grid(NS_X = site[which( site$transect_orientation == "NS"), "x"]$x, 
+                    EW_X = site[which( site$transect_orientation == "EW"), "x"]$x) %>% 
+  add_column(
+        expand_grid(NS_Y = site[which( site$transect_orientation == "NS"), "y"]$y, 
+                    EW_Y = site[which( site$transect_orientation == "EW"), "y"]$y)) %>% 
+  filter(abs(NS_X - EW_X) <= b & abs(NS_Y - EW_Y) <= b)
+
+NS_dupe <- test %>% 
+  select(NS_X, NS_Y) %>% 
+  mutate( plant_id = case_when((sapply(c(site$x), FUN = function(x)x %in% c(NS_X )) & 
+                                sapply(c(site$y), FUN = function(x)x %in% c(NS_Y ))) ~ 
+                                site[which((sapply(c(site$x), FUN = function(x)x %in% c(NS_X )) & 
+                                            sapply(c(site$y), FUN = function(x)x %in% c(NS_Y )) )), "plant_id"], TRUE ~ 0))
+NS_dupe
+}
+
+
+EW_dupe <- test %>% 
+  select(EW_X, NS_Y)
 
   
-picnic_id[which((sapply(c(picnic_id$x), FUN = function(x)x %in% c(test_duping1$EW_X )) & 
-                 sapply(c(picnic_id$y), FUN = function(x)x %in% c(test_duping1$EW_Y ))) |
-                (sapply(c(picnic_id$x), FUN = function(x)x %in% c(test_duping1$NS_X )) & 
-                 sapply(c(picnic_id$y), FUN = function(x)x %in% c(test_duping1$NS_Y )) )
+  
+  
+
+site[which((sapply(c(site$x), FUN = function(x)x %in% c(test$EW_X )) & 
+            sapply(c(site$y), FUN = function(x)x %in% c(test$EW_Y )))
+           |
+           (sapply(c(site$x), FUN = function(x)x %in% c(test$NS_X )) & 
+            sapply(c(site$y), FUN = function(x)x %in% c(test$NS_Y )) )
                 ),]
+}
+
+duping1(fram_id, 0.5)
+
+
+sapply(c(fram_id[which( fram_id$transect_orientation == "EW"), "x"]$x), 
+       FUN = function(U){
+         sapply(c(fram_id[which( fram_id$transect_orientation == "NS"), "x"])$x,
+                FUN = function(V){
+                  sum(which(abs( V - U ) <= 0.5))} 
+         )
+       }
+)
 
 ```
 
