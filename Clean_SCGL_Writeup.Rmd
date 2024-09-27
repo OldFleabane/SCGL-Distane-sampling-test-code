@@ -393,8 +393,8 @@ print( paste("Corrected number of observations =",
              mean( c(n_distinct(which(picnic_id$transect_orientation == "NS")) /           ob_error_picnic, n_distinct(which(picnic_id$transect_orientation == "EW")) /           ob_error_picnic)) , sep = " ")) 
 
 ```
-### Changing Fuziness
 
+### Changing Fuziness
 
 ```{r}
 start <- Sys.time()
@@ -443,3 +443,60 @@ stop <- Sys.time()
 time2 <- stop - start
  
 ```
+
+
+```{r}
+start <- Sys.time()
+#make a curve that shows how the number of corrected observations changes as you change the fuzziness
+
+fuzziness <- c(seq(0, 1, by = 0.1))
+ 
+      error = fuzziness
+      n_duplicated = fuzziness
+      n_actual = fuzziness 
+      n_corrected = fuzziness
+
+
+
+for (fuzz in fuzziness){
+  
+picnic_crazy <- mutate(picnic_1, plant_id = c(1:nrow(picnic_1)))
+
+for (i in which(picnic_crazy$transect_orientation == "NS")){  #looping through every ns observation
+  
+
+  for (n in which(picnic_crazy$transect_orientation == "EW")){ #looping against every ew observation
+  
+if(
+  ( abs(picnic_crazy[i,'x'] - picnic_crazy[n,'x']) <= fuzz ) & 
+    abs(picnic_crazy[i,'y'] - picnic_crazy[n,'y']) <= fuzz ){
+    picnic_crazy[i, 'plant_id'] <- picnic_crazy[n, 'plant_id']
+  }
+  }
+  
+}
+  temp_error <-  which(error == as.character(fuzz))  
+   error[which(error == as.character(fuzz))] <- (nrow(filter(picnic_crazy, duplicated(plant_id))) / nrow(picnic_crossed))
+
+   n_duplicated[which(n_duplicated == as.character(fuzz))] <- sum(duplicated(picnic_crazy$plant_id))
+    
+   n_actual[which(n_actual == as.character(fuzz))] <- n_distinct(picnic_crazy$plant_id)
+   
+   n_corrected[temp_error] <- mean( c(n_distinct(which(picnic_crazy$transect_orientation == "NS"))/error[temp_error],
+                                       n_distinct(which(picnic_crazy$transect_orientation == "EW"))/error[temp_error]))
+    
+}
+picnic_fuzz <- tibble(fuzziness, error, n_actual, n_duplicated, n_corrected)
+stop <- Sys.time()
+time5 <- stop - start
+ 
+```
+
+```{r}
+pivot_longer(picnic_fuzz, cols = !fuzziness, names_to= "type", values_to= "count") %>% 
+  group_by(type) %>% 
+  ggplot( aes(fuzziness, count, color = type))+
+  geom_line() +
+  labs( x = "Fuzziness (m)")
+```
+
