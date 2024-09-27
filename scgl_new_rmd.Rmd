@@ -101,6 +101,51 @@ if(
 }
 
 ```
+```{r}
+
+test_duping <- expand_grid(NS_X = fram_id[which( fram_id$transect_orientation == "NS"), "x"]$x, 
+              EW_X = fram_id[which( fram_id$transect_orientation == "EW"), "x"]$x) %>% 
+  add_column(
+  expand_grid(NS_Y = fram_id[which( fram_id$transect_orientation == "NS"), "y"]$y, 
+              EW_Y = fram_id[which( fram_id$transect_orientation == "EW"), "y"]$y)) %>%
+  filter(abs(NS_X - EW_X) <= 0.5 & abs(NS_Y - EW_Y) <= 0.5)
+
+fram_id[which(sapply(c(fram_id$x), FUN = function(x)x %in% c(test_duping$NS_X )) & 
+              sapply(c(fram_id$y), FUN = function(x)x %in% c(test_duping$NS_Y )) ),]
+
+  
+   ggplot( data = fram_id[which((sapply(c(fram_id$x), FUN = function(x)x %in% c(test_duping$EW_X )) & 
+              sapply(c(fram_id$y), FUN = function(x)x %in% c(test_duping$EW_Y ))) |
+              (sapply(c(fram_id$x), FUN = function(x)x %in% c(test_duping$NS_X )) & 
+              sapply(c(fram_id$y), FUN = function(x)x %in% c(test_duping$NS_Y )) )
+                ),], mapping = aes(x = x, y = y)) +
+  geom_point() +
+  geom_segment(data = fram_lines, aes(x = x, y = y, xend = xend, yend = yend)) 
+
+
+  
+
+ 
+
+
+
+test_crossing <- function(site, b){
+  
+  for (i in which(site$transect_orientation == "NS")){
+  dupes <- c()
+ ew_x <- c(site[which( site$transect_orientation == "EW"), "x"])
+ ew_y <- c(site[which( site$transect_orientation == "EW"), "y"])
+ 
+ 
+dupes <- which( abs(site[i,'x'] - ew_x) <= b  & 
+                abs(site[i,'y'] - ew_y) <= b )
+  }
+ dupes
+}
+
+test_crossing(fram_id, 0.5)
+```
+
 
 ```{r function for cross zone, eval=FALSE, include=FALSE}
 # Use a 'forloop' to filter cactus in the range we need. 
@@ -548,4 +593,25 @@ ggplot(fram_fuzz[-1, ]) +
 
 ```
 
+
+```{r}
+
+test_duping1 <- expand_grid(NS_X = picnic_id[which( picnic_id$transect_orientation == "NS"), "x"]$x, 
+              EW_X = picnic_id[which( picnic_id$transect_orientation == "EW"), "x"]$x) %>% 
+  add_column(
+  expand_grid(NS_Y = picnic_id[which( picnic_id$transect_orientation == "NS"), "y"]$y, 
+              EW_Y = picnic_id[which( picnic_id$transect_orientation == "EW"), "y"]$y)) %>%
+  filter(abs(NS_X - EW_X) <= 0.5 & abs(NS_Y - EW_Y) <= 0.5)
+
+picnic_id[which(sapply(c(picnic_id$x), FUN = function(x)x %in% c(test_duping1$NS_X )) & 
+                sapply(c(picnic_id$y), FUN = function(x)x %in% c(test_duping1$NS_Y )) ), ]
+
+  
+picnic_id[which((sapply(c(picnic_id$x), FUN = function(x)x %in% c(test_duping1$EW_X )) & 
+                 sapply(c(picnic_id$y), FUN = function(x)x %in% c(test_duping1$EW_Y ))) |
+                (sapply(c(picnic_id$x), FUN = function(x)x %in% c(test_duping1$NS_X )) & 
+                 sapply(c(picnic_id$y), FUN = function(x)x %in% c(test_duping1$NS_Y )) )
+                ),]
+
+```
 
