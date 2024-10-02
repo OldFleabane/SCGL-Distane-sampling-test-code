@@ -35,21 +35,33 @@ This function will be used later to find duplicate plants
 ```{r test function}
 
 #trying out a custom function
-crossed <- function(a, b){ 
-  temp <- a
-for (i in which(temp$transect_orientation == "NS")){  #looping through every ns observation
+crossed <- function(site, b){
   
-  for (n in which(temp$transect_orientation == "EW")){ #looping against every ew observation
+ temp_site <-  site %>% 
+    rowwise() %>% 
+    mutate(coord = list(c(x,y)))
   
-if(
-  ( abs(temp[i,'x'] - temp[n,'x']) <= b ) & 
-    abs(temp[i,'y'] - temp[n,'y']) <= b ){
-    temp[i, 'plant_id'] <- temp[n, 'plant_id']
-  }
-  } 
-  }
-  temp
-}
+ grid <-  expand.grid(EW = temp_site[which( site$transect_orientation == "EW"), "coord"]$coord,
+                      NS = temp_site[which( site$transect_orientation == "NS"), "coord"]$coord) %>% 
+    rowwise() %>% 
+    mutate( dist = sqrt(sum((EW - NS)^2))) %>% 
+    filter(dist <= b) 
+
+grid <- left_join(grid, temp_site[, c("coord", "plant_id")], by = join_by(EW == coord)) %>% 
+  mutate(EW_ID = plant_id, plant_id = NULL) %>% 
+  left_join(temp_site[, c("coord", "plant_id")], by = join_by(NS == coord)) %>% 
+  mutate(NS_ID = plant_id, plant_id = NULL)
+
+grid <- filter(group_by(grid, NS_ID), dist == min(dist))
+grid <- filter(group_by(grid, EW_ID), dist == min(dist))
+
+temp_site <- left_join(temp_site, grid[, c("EW_ID", "NS_ID")], by = join_by(plant_id == EW_ID)) %>% 
+  mutate( plant_id = ifelse( !is.na(NS_ID), NS_ID, plant_id), NS_ID = NULL, coord = NULL) %>% 
+  ungroup()
+  
+temp_site
+  
+} 
 
 ```
 
@@ -146,8 +158,13 @@ For the initial marking of overlapping points we will use a **fuzziness of 0.5cm
 
 ```{r fram dupes and plot}
 fram_id <- mutate(fram_1, plant_id = c(1:nrow(fram_1)))
+
+fram_id <- mutate(fram_id, zoned = case_when( c(rowSums(mapply( FUN = function(a, b){between(a, b-3, b+3)}, fram_id[, "y"], c(10, 50, 70, 80, 90))) +
+                                              rowSums(mapply( FUN = function(a, b){between(a, b-3, b+3)}, fram_id[, "x"], c(-10, -20, -30)))) == 2 ~ 1,
+       TRUE ~ 0)) 
+
    
-fram_id <- crossed(fram_id, .5)  # a = plot data w/ID's, b = fuzziness
+fram_id <- crossed(filter(fram_id, zoned == 1), 0.5)  # a = plot data w/ID's, b = fuzziness
 
 fram_plot1 <- fram_id %>% 
   filter( duplicated(plant_id)) %>% 
@@ -174,39 +191,9 @@ Dark blue points are overlapping observations based on fuzziness provided in the
 Use a loop to filter down to only cactus that *should* have been seen both going EW & NS. The Observational Error calculated will be applied separately to NS & EW actual observations and then averaged together. This is meant to avoid double counting of overlapping observations.
 
 ```{r fram cross sectioned}
-
-# Use a 'forloop' to filter cactus in the range we need. 
-fram_crossed <- fram_id %>% filter( between(transect_meter_mark, 0, 0)  )
-fram_crossed_ns <- fram_id %>% filter( between(transect_meter_mark, 0, 0)  )
-fram_crossed_ew <- fram_id %>% filter( between(transect_meter_mark, 0, 0)  )
-
-for( i in c(10, 50, 70, 80, 90)){
-  
-   output <- filter(fram_id, between(y, i-3, i+3) &  transect_orientation == "NS")
-    fram_crossed_ns <- rbind(fram_crossed_ns, output)
-}
-    
-for( i in c(-10, -20, -30)){
-  
-   output <- filter(fram_id, between(x, i-3, i+3) &  transect_orientation == "EW")
-    fram_crossed_ew <- rbind(fram_crossed_ew, output)
-}
-
-    fram_crossed <- fram_crossed%>% 
-      rbind(fram_crossed_ew) %>%
-      rbind(fram_crossed_ns) %>% 
-      filter(abs(distance_to_group) <= 3)
-    
-
-rm(output)
-
-
-#Because the lines were not evenly placed, the observations need to be filter again to only the actual crossed zones
-
-
 #  error comes from the number if plants were seen going NS AND EW divided by number if plants seen going NS OR EW within the 3 meter crossing zone
 
-ob_error_fram <- (nrow(filter(fram_id, duplicated(plant_id))) / nrow(fram_crossed))
+ob_error_fram <- (nrow(filter(fram_id, duplicated(plant_id))) / nrow(filter(fram_id, zoned == 1)))
 ```
 
 ```{r echo=FALSE}
@@ -330,12 +317,23 @@ pic_plot
 ### Marking Overlap
 
 ```{r}
+
+#apply unique ID's
 picnic_id <- mutate(picnic_1, plant_id = c(1:nrow(picnic_1)))
 
-picnic_id <- crossed(picnic_id, 0.5)
+#filter to crozzing zones
+picnic_id <- mutate(picnic_id, zoned = case_when( c(rowSums(mapply( FUN = function(a, b){between(a, b-3, b+3)}, picnic_id[, "y"], c(20, 30, 40, 50))) +
+                                                    rowSums(mapply( FUN = function(a, b){between(a, b-3, b+3)}, picnic_id[, "x"], c(-20, -30, -40)))) == 2 ~ 1,
+       TRUE ~ 0)) 
 
-pic_plot1 <- pic_plot + 
+#find duplicates within those zones
+picnic_id <- crossed(filter(picnic_id, zoned == 1), 0.5)
+
+pic_plot1 <- picnic_id %>% 
+  ggplot( mapping = aes(x, y)) +
+  geom_point(aes(color = transect_orientation), shape = 1) +
   geom_point(data = filter(picnic_id, duplicated(plant_id))) +
+  geom_segment(data = pic_lines, aes(x = x, y = y, xend = xend, yend = yend)) +
   geom_text_repel(data = pic_lines,
             aes( label = label),
             size = 3,
@@ -347,39 +345,16 @@ pic_plot1
 ### Observational Error
 
 ```{r}
-# Use a 'forloop' to filter cactus in the range we need. 
-picnic_crossed <- picnic_id %>% filter( between(transect_meter_mark, 0, 0)  )
-picnic_crossed_ns <- picnic_id %>% filter( between(transect_meter_mark, 0, 0)  )
-picnic_crossed_ew <- picnic_id %>% filter( between(transect_meter_mark, 0, 0)  )
 
-for( i in c(20, 30, 40, 50)){
-  
-   output <- filter(picnic_id, between(y, i-3, i+3) &  transect_orientation == "NS")
-    picnic_crossed_ns <- rbind(picnic_crossed_ns, output)
-}
-    
-for( i in c(-20, -30, -40)){
-  
-   output <- filter(picnic_id, between(x, i-3, i+3) &  transect_orientation == "EW")
-    picnic_crossed_ew <- rbind(picnic_crossed_ew, output)
-}
-
-    picnic_crossed <- picnic_crossed%>% 
-      rbind(picnic_crossed_ew) %>%
-      rbind(picnic_crossed_ns) %>% 
-      filter(abs(distance_to_group) <= 3)
-    
-
-rm(output)
-
-ob_error_picnic <- (nrow(filter(picnic_id, duplicated(plant_id))) / nrow(picnic_crossed))
+ob_error_picnic <- (nrow(filter(picnic_id, duplicated(plant_id))) / nrow(filter(picnic_id, zoned == 1)))
 
 
-picnic_crossed %>%
+picnic_id %>%
+  filter(zoned == 1) %>% 
   ggplot( mapping = aes(x = x, y = y)) +
   geom_point(aes(color = transect_orientation), shape = 1) +
   geom_segment(data = pic_lines, aes(x = x, y = y, xend = xend, yend = yend)) +
-  geom_point(data = filter(picnic_crossed, duplicated(plant_id))) +
+  geom_point(data = filter(picnic_id, duplicated(plant_id))) +
   geom_text_repel(data = pic_lines,
             aes( label = label),
             size = 3,)
@@ -397,11 +372,11 @@ print( paste("Corrected number of observations =",
 
 ### Changing Fuziness
 
-```{r}
+```{r warning=FALSE}
 
 #make a curve that shows how the number of corrected observations changes as you change the fuzziness
 
-fuzziness <- c(seq(0, 2, by = 0.1))
+fuzziness <- c(seq(0, 3, by = 0.1))
  
       error = fuzziness
       n_duplicated = fuzziness
@@ -412,25 +387,38 @@ fuzziness <- c(seq(0, 2, by = 0.1))
 for (fuzz in fuzziness){
   
 picnic_crazy <- mutate(picnic_1, plant_id = c(1:nrow(picnic_1)))
+picnic_crazy <- mutate(picnic_crazy, zoned = case_when( c(rowSums(mapply( FUN = function(a, b){between(a, b-3, b+3)}, picnic_crazy[, "y"], c(20, 30, 40, 50))) +
+                                                    rowSums(mapply( FUN = function(a, b){between(a, b-3, b+3)}, picnic_crazy[, "x"], c(-20, -30, -40)))) == 2 ~ 1,
+       TRUE ~ 0)) 
 
-test <- expand_grid(NS_X = picnic_crazy[which( picnic_crazy$transect_orientation == "NS"), "x"]$x, 
-                    EW_X = picnic_crazy[which( picnic_crazy$transect_orientation == "EW"), "x"]$x) %>% 
-  add_column(
-        expand_grid(NS_Y = picnic_crazy[which( picnic_crazy$transect_orientation == "NS"), "y"]$y, 
-                    EW_Y = picnic_crazy[which( picnic_crazy$transect_orientation == "EW"), "y"]$y)) %>% 
-  filter(abs(NS_X - EW_X) <= fuzz & abs(NS_Y - EW_Y) <= fuzz)
+ temp_site <-  picnic_crazy %>% 
+    rowwise() %>% 
+    mutate(coord = list(c(x,y)))
+  
+ grid <-  expand.grid(EW = temp_site[which( temp_site$transect_orientation == "EW"), "coord"]$coord,
+                      NS = temp_site[which( temp_site$transect_orientation == "NS"), "coord"]$coord) %>% 
+    rowwise() %>% 
+    mutate( dist = sqrt(sum((EW - NS)^2))) %>% 
+    filter(dist <= fuzz) 
 
-test_join <- full_join(picnic_crazy, test, by = join_by(x == EW_X, y == EW_Y))
+grid <- left_join(grid, temp_site[, c("coord", "plant_id")], by = join_by(EW == coord)) %>% 
+  mutate(EW_ID = plant_id, plant_id = NULL) %>% 
+  left_join(temp_site[, c("coord", "plant_id")], by = join_by(NS == coord)) %>% 
+  mutate(NS_ID = plant_id, plant_id = NULL)
 
-test_join1 <- mutate( test_join, new_id = plant_id)
-test_dupe <- left_join(test_join, test_join1[, c( "new_id", "NS_X", "NS_Y")], by = join_by(x == NS_X, y == NS_Y)) 
-test_dupe <- mutate(test_dupe, plant_id = case_when( !is.na(test_dupe$new_id) ~ new_id, TRUE ~ plant_id)) 
-test_dupe <- mutate( test_dupe, new_id = NULL, NS_X = NULL, NS_Y = NULL, )
-picnic_crazy <- test_dupe
 
+grid <- filter(group_by(grid, NS_ID), dist == min(dist))
+grid <- filter(group_by(grid, EW_ID), dist == min(dist))
+
+
+temp_site <- left_join(temp_site, grid[, c("EW_ID", "NS_ID")], by = join_by(plant_id == EW_ID)) %>% 
+  mutate( plant_id = ifelse( !is.na(NS_ID), NS_ID, plant_id), NS_ID = NULL, coord = NULL) %>% 
+  ungroup()
+  
+picnic_crazy <- temp_site 
 
 temp_error <-  which(error == as.character(fuzz))  
-   error[which(error == as.character(fuzz))] <- (nrow(filter(picnic_crazy, duplicated(plant_id))) / nrow(pic_crossed))
+   error[which(error == as.character(fuzz))] <- (nrow(filter(picnic_crazy, duplicated(plant_id))) / nrow(filter(picnic_id, zoned == 1)))
 
    n_duplicated[which(n_duplicated == as.character(fuzz))] <- sum(duplicated(picnic_crazy$plant_id))
     
@@ -455,4 +443,3 @@ pivot_longer(picnic_fuzz, cols = !fuzziness, names_to= "type", values_to= "count
 
 
 ```
-

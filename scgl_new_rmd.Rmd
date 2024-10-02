@@ -150,21 +150,13 @@ test_crossing(fram_id, 0.5)
 ```{r function for cross zone, eval=FALSE, include=FALSE}
 # Use a 'forloop' to filter cactus in the range we need. 
 
-three_meter <- function(site){
-  
-  temp_site <- filter(site, between(transect_meter_mark, 0, 0))
-  
-  for (i in  seq(from = 0, to = 100, by = 10)){
-    temp_cross <- filter(temp_site, between( transect_meter_mark, i-3, i+3))
-    temp_site <- rbind(temp_site, temp_cross)
-  
-  } 
-  temp_site <- filter(temp_site, distance_to_group <= 3)
-  
-  temp_site
-  
-}
+fram_1 <- mutate(fram_1, zoned = case_when( c(rowSums(mapply( FUN = function(a, b){between(a, b-3, b+3)}, fram_1[, "y"], c(10, 50, 70, 80, 90))) +
+                                    rowSums(mapply( FUN = function(a, b){between(a, b-3, b+3)}, fram_1[, "x"], c(-10, -20, -30)))) == 2 ~ 1,
+       TRUE ~ 0)) 
 
+picnic_1 <- mutate(picnic_1, zoned = case_when( c(rowSums(mapply( FUN = function(a, b){between(a, b-3, b+3)}, picnic_1[, "y"], c(20, 30, 40, 50))) +
+                                    rowSums(mapply( FUN = function(a, b){between(a, b-3, b+3)}, picnic_1[, "x"], c(-20, -30, -40)))) == 2 ~ 1,
+       TRUE ~ 0)) 
 
 ```
 
@@ -596,36 +588,7 @@ pivot_longer(fram_fuzz, cols = !fuzziness, names_to= "type", values_to= "count")
 ```
 
 
-```{r}
 
-duping <- function(site, b){
-
-test_duping1 <- expand_grid(NS_X = site[which( site$transect_orientation == "NS"), "x"]$x, 
-                            EW_X = site[which( site$transect_orientation == "EW"), "x"]$x) %>% 
-  add_column(
-                expand_grid(NS_Y = site[which( site$transect_orientation == "NS"), "y"]$y, 
-                            EW_Y = site[which( site$transect_orientation == "EW"), "y"]$y)) %>%
-  filter(abs(NS_X - EW_X) <= b & abs(NS_Y - EW_Y) <= b)
-  
-site[which((sapply(c(site$x), FUN = function(x)x %in% c(test_duping1$EW_X )) & 
-            sapply(c(site$y), FUN = function(x)x %in% c(test_duping1$EW_Y )))|
-           (sapply(c(site$x), FUN = function(x)x %in% c(test_duping1$NS_X )) & 
-            sapply(c(site$y), FUN = function(x)x %in% c(test_duping1$NS_Y )) )
-                ),]
-}
-
-
-duping(fram_id, .5)
-
-
-
-
-fram_duped <- duping(fram_id, .5)
-fram_duped
-#mutate(fram_duped, plant_id = case_when( abs))
-
-
-```
 ```{r}
 duping1 <- function(site, b){
 
@@ -655,5 +618,88 @@ n_distinct(crossed(picnic_id, 0.5)[, "plant_id"])
 stop <- Sys.time()
 stop-start
 
+```
+
+```{r}
+
+
+
+
+duping2 <- function(site, b){
+  
+  mutate(site, coord = paste("c(", x, ",", y))
+
+test <- expand_grid(NS_X = site[which( site$transect_orientation == "NS"), "x"]$x, 
+                    EW_X = site[which( site$transect_orientation == "EW"), "x"]$x) %>% 
+  add_column(
+        expand_grid(NS_Y = site[which( site$transect_orientation == "NS"), "y"]$y, 
+                    EW_Y = site[which( site$transect_orientation == "EW"), "y"]$y)) %>% 
+  filter((NS_X - EW_X) <= b & abs(NS_Y - EW_Y) <= b)
+  
+test2 <- test %>% 
+  mutate(abs_X = abs(NS_X - EW_X), abs_Y = abs(NS_Y - EW_Y)) %>% 
+  
+ 
+
+
+#test3 <- test[which(abs(test$NS_X - test$EW_X) %in% test2$abs_X & abs(test$NS_Y - test$EW_Y) %in% test2$abs_Y), ]
+
+
+
+#test_join <- left_join(site, test3, by = join_by(x == EW_X, y == EW_Y))
+test2
+
+
+ #test2 <- test[ test$NS_X %in% filter(summarize(group_by(test, NS_X), n = sum(n())), n >1)$NS_X,]
+#test2 %>% 
+ # group_by(NS_X, NS_Y) %>% 
+ # reframe( abs_X = abs(NS_X - EW_X), abs_Y = abs(NS_Y - EW_Y)) %>% 
+ # group_by(NS_X, NS_Y) %>% 
+ # reframe( abs_X = min(abs_X), abs_Y = min(abs_Y))
+  
+
+ 
+
+
+
+}
+
+
+duping2(fram_id, 10)
+
+fram_id %>% rowwise %>% 
+  mutate(coords = list(c(x,y))) 
+
+
+
+mutate(fram_id, coord = paste("c(", x, ",", y, ")"))
+```
+
+```{r}
+duping3 <- function(site, b){
+  
+ temp_site <-  site %>% 
+    rowwise() %>% 
+    mutate(coord = list(c(x,y)))
+  
+ grid <-  expand.grid(EW = temp_site[which( site$transect_orientation == "EW"), "coord"]$coord,
+                      NS = temp_site[which( site$transect_orientation == "NS"), "coord"]$coord) %>% 
+    rowwise() %>% 
+    mutate( dist = sqrt(sum((EW - NS)^2))) %>% 
+    filter(dist <= b) 
+
+grid <- left_join(grid, temp_site[, c("coord", "plant_id")], by = join_by(EW == coord)) %>% 
+  mutate(EW_ID = plant_id, plant_id = NULL) %>% 
+  left_join(temp_site[, c("coord", "plant_id")], by = join_by(NS == coord)) %>% 
+  mutate(NS_ID = plant_id, plant_id = NULL)
+
+temp_site <- left_join(temp_site, grid[, c("EW_ID", "NS_ID")], by = join_by(plant_id == EW_ID)) %>% 
+  mutate( plant_id = ifelse( !is.na(NS_ID), NS_ID, plant_id), NS_ID = NULL)
+  temp_site
+}
+
+  n_distinct(duping3(fram_id, 0.5)$plant_id)
+  
+  
 ```
 
