@@ -425,7 +425,15 @@ pivot_longer(picnic_fuzz, cols = !fuzziness, names_to= "type", values_to= "count
 
 ```
 
-## Distributions
+## Notes and Errors
+
+-   There is an issue with this `change in fuzziness` section when using larger `fuzziness` in which the `n_duplicated` entries start to seemingly be rewritten to larger amounts than should actually be calculated. This issue is not present in the `crossed` function. The issue only occurs when looping the `crossed` function and writing the `*_fuzz` tables, so probably an issue with how `n_duplicated` is being written or called.
+
+-   Ideally the allowance for overlapping observations should be within 0.1m or 10cm as that is the distance in which we counted multiple cactus to be a part of a single group/observation. Using this allowance generates an abnormally small set of overlapping observations. Causes are possibly imprecise data collection, differences in actual plot set-up and recorded information, wind blowing transect lines resulting in differing measurements
+
+-   Further work correlating the covariates (group size, reproductive status, distance from observer) with observational biases should be done.
+
+------------------------------------------------------------------------
 
 Density of observations from 0 to 3m away from line.
 
@@ -445,21 +453,20 @@ Picnic (site 3) has a disproportionate amount of EW observations, but the trend 
 
 The Distance:Count trend is less obvious at Fram (site 12).
 
+------------------------------------------------------------------------
+
+Looking at correlation between any amount of flowering and overlapping observations
+
 ```{r}
-# looking at correlation between any amount of flowering and overlapping observations
+
 # dupe = is it an overlapping observation?
 # flower = is it flowering at all?
 fram_duped %>% 
   mutate(dupe = ifelse(plant_id %in% fram_duped[which(duplicated(plant_id)),]$plant_id, 1, 0), 
          flower = ifelse(number_reproductive_in_group >= 1, 1, 0)) %>%
   filter(dupe == 1) %>% 
-  mutate( flower = ifelse( is.na(flower), 0, flower))
+  mutate( flower = ifelse( is.na(flower), 0, flower)) %>% 
+  summarize( "flowering:vegetative" = sum(flower)/sum(dupe))
+
+# shows that, at Fram, 75% of the overlapping observations had at least 1 reproductive individual in the group
 ```
-
-## Notes and Errors
-
--   There is an issue with this `change in fuzziness` section when using larger `fuzziness` in which the `n_duplicated` entries start to seemingly be rewritten to larger amounts than should actually be calculated. This issue is not present in the `crossed` function. The issue only occurs when looping the `crossed` function and writing the `*_fuzz` tables, so probably an issue with how `n_duplicated` is being written or called.
-
--   Ideally the allowance for overlapping observations should be within 0.1m or 10cm as that is the distance in which we counted multiple cactus to be a part of a single group/observation. Using this allowance generates an abnormally small set of overlapping observations. Causes are possibly imprecise data collection, differences in actual plot set-up and recorded information, wind blowing transect lines resulting in differing measurements
-
--   Further work correlating the covariates (group size, reproductive status, distance from observer) with observational biases should be done.
