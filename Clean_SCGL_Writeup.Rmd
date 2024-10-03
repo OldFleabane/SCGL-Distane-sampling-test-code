@@ -12,6 +12,7 @@ End goals:
 -   Plot the individual observations for each site on a coordinate grid
 -   Mark the observations which overlap/were observed both going NS & EW.
 -   Get a percent observational error to apply across the observed population.
+-   Distribution of observations based on distance from line
 
 Site names: 3 & 1= Picnic, 10= Bridgport, 12= Fram
 
@@ -424,8 +425,41 @@ pivot_longer(picnic_fuzz, cols = !fuzziness, names_to= "type", values_to= "count
 
 ```
 
+## Distributions
+
+Density of observations from 0 to 3m away from line.
+
+```{r}
+ 
+scgl1 %>% 
+  filter(abs(distance_to_group) <= 4, site_name ==3 | site_name == 12) %>% 
+  ggplot(aes( x = abs(distance_to_group), fill = transect_orientation)) +
+  geom_histogram(bins = 30, alpha = 0.3 )+
+  facet_wrap( facets = vars(site_name))
+# note: site 3 = Picnic, site 12 = Fram
+
+
+```
+
+Picnic (site 3) has a disproportionate amount of EW observations, but the trend matches the assumption that less observations will be made as the distance from the observer increases.
+
+The Distance:Count trend is less obvious at Fram (site 12).
+
+```{r}
+# looking at correlation between any amount of flowering and overlapping observations
+# dupe = is it an overlapping observation?
+# flower = is it flowering at all?
+fram_duped %>% 
+  mutate(dupe = ifelse(plant_id %in% fram_duped[which(duplicated(plant_id)),]$plant_id, 1, 0), 
+         flower = ifelse(number_reproductive_in_group >= 1, 1, 0)) %>%
+  filter(dupe == 1) %>% 
+  mutate( flower = ifelse( is.na(flower), 0, flower))
+```
+
 ## Notes and Errors
 
 -   There is an issue with this `change in fuzziness` section when using larger `fuzziness` in which the `n_duplicated` entries start to seemingly be rewritten to larger amounts than should actually be calculated. This issue is not present in the `crossed` function. The issue only occurs when looping the `crossed` function and writing the `*_fuzz` tables, so probably an issue with how `n_duplicated` is being written or called.
 
--   
+-   Ideally the allowance for overlapping observations should be within 0.1m or 10cm as that is the distance in which we counted multiple cactus to be a part of a single group/observation. Using this allowance generates an abnormally small set of overlapping observations. Causes are possibly imprecise data collection, differences in actual plot set-up and recorded information, wind blowing transect lines resulting in differing measurements
+
+-   Further work correlating the covariates (group size, reproductive status, distance from observer) with observational biases should be done.
