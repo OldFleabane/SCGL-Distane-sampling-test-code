@@ -103,7 +103,8 @@ scgl1 <- scgl %>%
 scgl1 <- scgl1 %>% 
   mutate( x = case_when(transect_orientation == "NS" ~ distance_to_group, transect_orientation == "EW" ~ transect_meter_mark), 
           y = case_when(transect_orientation == "EW" ~ distance_to_group, transect_orientation == "NS" ~ transect_meter_mark)) 
-                
+
+scgl1 <- left_join(scgl1, scgl_trans_length[, c("Transect Length", "GlobalID")], by = join_by(parent_global_id == GlobalID))                
                 
 #filtering to sites
 fram <- scgl1 %>% 
@@ -111,6 +112,12 @@ fram <- scgl1 %>%
 
 picnic <- scgl1 %>% 
   filter(site_name == "1"| site_name == "3")
+
+bridgeport <- scgl1 %>% 
+  filter(site_name == "10")
+
+oilpad <- scgl1 %>% 
+  filter(site_name == "11")
 
 ```
 
@@ -221,7 +228,7 @@ Use a loop to filter down to only cactus that *should* have been seen both going
 ```{r fram cross sectioned}
 #  error comes from the number if plants were seen going NS AND EW divided by number if plants seen going NS OR EW within the 3 meter crossing zone
 
-ob_error_fram <- (nrow(filter(fram_duped, duplicated(plant_id))) / nrow(filter(fram_duped, zoned == 1)))
+ob_error_fram <- (nrow(filter(fram_duped, duplicated(plant_id)))*2 / nrow(filter(fram_duped, zoned == 1)))
 ```
 
 ```{r echo=FALSE}
@@ -259,7 +266,7 @@ for (fuzz in fuzziness){
 fram_crazy <- crossed(fram_id, fuzz)
 
 temp_error <-  which(error == as.character(fuzz))  
-   error[which(error == as.character(fuzz))] <- (nrow(filter(fram_crazy, duplicated(plant_id))) / nrow(filter(fram_id, zoned == 1)))
+   error[which(error == as.character(fuzz))] <- (nrow(filter(fram_crazy, duplicated(plant_id)))*2 / nrow(filter(fram_id, zoned == 1)))
 
    n_duplicated[which(n_duplicated == as.character(fuzz))] <- sum(duplicated(fram_crazy$plant_id))
     
@@ -366,7 +373,7 @@ pic_plot1
 
 ```{r echo=FALSE}
 
-ob_error_picnic <- (nrow(filter(picnic_duped, duplicated(plant_id))) / nrow(filter(picnic_duped, zoned == 1)))
+ob_error_picnic <- (nrow(filter(picnic_duped, duplicated(plant_id)))*2 / nrow(filter(picnic_duped, zoned == 1)))
 
 print(paste("Observational error =", ob_error_picnic, sep = " "))
 print(paste("Actual number of unique cactus = ", n_distinct(picnic_duped$plant_id), sep = " " ))
@@ -398,7 +405,7 @@ for (fuzz in fuzziness){
 picnic_crazy <- crossed(picnic_id, fuzz)
 
 temp_error <-  which(error == as.character(fuzz))  
-   error[which(error == as.character(fuzz))] <- (nrow(filter(picnic_crazy, duplicated(plant_id))) / nrow(filter(picnic_id, zoned == 1)))
+   error[which(error == as.character(fuzz))] <- (nrow(filter(picnic_crazy, duplicated(plant_id)))*2 / nrow(filter(picnic_id, zoned == 1)))
 
    n_duplicated[which(n_duplicated == as.character(fuzz))] <- sum(duplicated(picnic_crazy$plant_id))
     
@@ -423,6 +430,160 @@ pivot_longer(picnic_fuzz, cols = !fuzziness, names_to= "type", values_to= "count
 
 
 
+```
+
+## Site: OilPad
+
+```{r}
+
+
+oilpad_lines <- tibble( x = c(-20, 0, 0),
+                        y = c(0, 20, 40),
+                        xend = c(-20, -60, -60), 
+                        yend = c(60, 20, 40))
+oilpad_1 <- oilpad %>% 
+  mutate( x = case_when(transect_orientation == "EW" ~ x, 
+                        transect_orientation == "NS" ~ x - 20),
+          y = case_when(transect_number == 1 ~ y + 20,
+                        transect_number == 2 & transect_orientation == "EW" ~ y+40,
+                        transect_number == 21 & transect_orientation == "EW" ~ y+40,
+                        transect_orientation == "NS" ~ y)
+          )
+
+oilpad_plot <- oilpad_1 %>% 
+  ggplot( aes(x,y)) +
+  geom_point( aes(color = transect_number)) +
+  geom_segment(data = oilpad_lines, aes(x = x, y = y, xend = xend, yend = yend))
+
+oilpad_plot
+
+
+```
+
+Oil pad had double observers along the EW transects, so duplicates will need to be made along the same transect ( 2EW = 21EW & 2NS = 21NS)
+
+```{r}
+
+# `site` = a dataframe with relative (x,y) coords as seperate columns `x` & `y`, transect directions as `NS` & `EW`, and unique `plant_id' for each observation.
+# `b` = an allowance in meters(m) within which two observations (1 NS & 1 EW) will be considered the same observation
+oilpad_id <- mutate(oilpad_1, plant_id = c(1:nrow(oilpad_1)))
+
+ temp_site <-  oilpad_id %>% 
+    rowwise() %>% 
+    mutate(coord = list(c(x,y)))
+  
+#chart all possible combinations of NS coordinates and EW coordinates
+ grid <-  expand.grid(original = temp_site[which( oilpad_id$transect_number == 2), "coord"]$coord,
+                      double = temp_site[which( oilpad_id$transect_number == 21), "coord"]$coord) %>% 
+    rowwise() %>% 
+   #make a column of distances between points
+    mutate( dist = sqrt(sum((original - double)^2))) %>% 
+   #filter the combinations to only the ones within the supplied fuzziness `b`
+    filter(dist <= 1)
+
+#appending to contain columns with EW plant_id's for each combination
+grid <- left_join(grid, temp_site[, c("coord", "plant_id")],
+                  by = join_by(original == coord)) %>% 
+  mutate(original_ID = plant_id, plant_id = NULL) %>% 
+#appending to contain columns with NS plant_id's for each combination
+        left_join(temp_site[, c("coord", "plant_id")], 
+                  by = join_by(double == coord)) %>% 
+  mutate(double_ID = plant_id, plant_id = NULL)
+
+#checking for Id's with multiple matches.(Should be only one distinct NS observation for each distinct EW observation). Keep only the match with the least distance between points
+if(!all(count(grid, original_ID)$n >1)){
+grid <- filter(group_by(grid, double_ID), dist == min(dist))
+grid <- filter(group_by(grid, double_ID), dist == min(dist))
+}
+
+#Within the original dataframe, change corresponding EW ID's to their NS counterparts
+temp_site <- left_join(temp_site, grid[, c("original_ID", "double_ID")], by = join_by(plant_id == original_ID)) 
+temp_site <- temp_site %>% 
+  mutate( plant_id = ifelse( !is.na(double_ID), double_ID, plant_id), double_ID = NULL, coord = NULL) %>% 
+  ungroup()
+  
+temp_site -> oilpad_duped
+rm(temp_site, grid)  
+ 
+
+
+
+```
+
+```{r}
+oilpad_plot +
+  geom_point(data =  filter(oilpad_duped, duplicated(plant_id)), aes(x,y), color = "blue") +
+  geom_text_repel(data = oilpad_duped, aes( label = plant_id), size = 3, min.segment.length = 0.1)
+```
+
+Possible duplicates with mistyped X coordinates are {plant 6 (-3.57, 39.36) & plant 8 (-8.27, 39.00)} and {plant 9 (-0.56, 40.15) & plant 7(-9.57, 40.17)}.
+
+## Site: Bridgeport
+
+### Plotting individuals
+
+```{r}
+bridgeport_lines <- tibble( x = c(-30, -40, -50, 0, 0, 0, 0),
+                            y = c( 0, 0, 0, 10, 20, 30, 40),
+                            xend = c(-30, -40, -50, -53, -53, -53, -53),
+                            yend = c(50, 50, 40, 10, 20, 30, 40 )
+)
+
+bridgeport_1 <- bridgeport %>% 
+  mutate(x = case_when( transect_orientation == "NS" & transect_number == 1 ~ x-30,
+                        transect_orientation == "NS" & transect_number == 2 ~ x-40,
+                        transect_orientation == "NS" & transect_number == 3 ~ x-50,
+                        TRUE ~ x
+                        ),
+         y = case_when( transect_orientation == "EW" & transect_number == 1 ~ y+10,
+                        transect_orientation == "EW" & transect_number == 2 ~ y+20,
+                        transect_orientation == "EW" & transect_number == 3 ~ y+30,
+                        TRUE ~ y
+                        )
+         )
+
+
+
+bridgeport_plot <- bridgeport_1 %>%
+  ggplot(aes(x,y))+
+  geom_point(aes(color = transect_orientation))+
+  geom_segment(data = bridgeport_lines, aes(x = x, y = y, xend = xend, yend = yend))
+
+bridgeport_plot
+```
+
+### Marking Overlap
+
+```{r}
+bridgeport_id <- mutate(bridgeport_1, plant_id = c(1:nrow(bridgeport_1)))
+
+#filter to crozzing zones
+bridgeport_id <- mutate(bridgeport_id, zoned = case_when( c(rowSums(mapply( FUN = function(a, b){between(a, b-3, b+3)}, bridgeport_id[, "y"], c(10, 20, 30, 40))) +
+                                                    rowSums(mapply( FUN = function(a, b){between(a, b-3, b+3)}, bridgeport_id[, "x"], c(-30, -40, -50)))) == 2 ~ 1,
+       TRUE ~ 0)) 
+
+#find duplicates within those zones
+bridgeport_duped <- crossed(filter(bridgeport_id), 0.5)
+
+bridgeport_plot +
+  geom_point(data =  filter(bridgeport_duped, duplicated(plant_id)), aes(x,y), color = "blue") +
+  geom_text_repel(data = filter(bridgeport_duped, duplicated(plant_id)), aes( label = plant_id), size = 3, min.segment.length = 0.1)
+```
+
+### Observational Error
+
+```{r}
+ob_error_bridgeport <- (nrow(filter(bridgeport_duped, duplicated(plant_id)))*2 / 
+                        nrow(filter(bridgeport_duped, zoned == 1)))
+
+print(paste("Observational error =", ob_error_bridgeport, sep = " "))
+print(paste("Actual number of unique cactus = ", n_distinct(bridgeport_duped$plant_id), sep = " " ))
+#should be the corrected number of observations. 
+print( paste("Corrected number of observations =",
+             mean( c(n_distinct(which(bridgeport_duped$transect_orientation == "NS"))/
+                       ob_error_bridgeport, 
+                     n_distinct(which(bridgeport_duped$transect_orientation == "EW")) /
+                       ob_error_bridgeport)) , sep = " ")) 
 ```
 
 ## Notes and Errors
