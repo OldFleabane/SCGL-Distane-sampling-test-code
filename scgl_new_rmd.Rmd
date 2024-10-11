@@ -698,11 +698,5 @@ tester
   
 ```
 
-```{r}
-scgl1 %>%
-  rowwise() %>% 
-  mutate( group_total = sum(number_seedlings_in_group, number_vegetative_in_group, number_reproductive_in_group, na.rm = TRUE))
 
-
-```
 

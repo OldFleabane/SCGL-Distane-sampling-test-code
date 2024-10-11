@@ -601,7 +601,7 @@ Density of observations from 0 to 3m away from line.
 ```{r}
  
 scgl1 %>% 
-  filter(abs(distance_to_group) <= 4, site_name ==3 | site_name == 12) %>% 
+  filter(abs(distance_to_group) <= 4) %>% 
   ggplot(aes( x = abs(distance_to_group), fill = transect_orientation)) +
   geom_histogram(bins = 30, alpha = 0.3 )+
   facet_wrap( facets = vars(site_name))
@@ -622,12 +622,34 @@ Looking at correlation between any amount of flowering and overlapping observati
 
 # dupe = is it an overlapping observation?
 # flower = is it flowering at all?
-fram_duped %>% 
+tibble( duped_ratio = (fram_duped %>% 
   mutate(dupe = ifelse(plant_id %in% fram_duped[which(duplicated(plant_id)),]$plant_id, 1, 0), 
          flower = ifelse(number_reproductive_in_group >= 1, 1, 0)) %>%
   filter(dupe == 1) %>% 
   mutate( flower = ifelse( is.na(flower), 0, flower)) %>% 
-  summarize( "flowering:vegetative" = sum(flower)/sum(dupe))
+  summarize( "Duped_ratio" = sum(flower)/sum(dupe)))$Duped_ratio,
 
+ total_ratio = (fram_duped %>% 
+  mutate(dupe = ifelse(plant_id %in% fram_duped[which(duplicated(plant_id)),]$plant_id, 1, 0), 
+         flower = ifelse(number_reproductive_in_group >= 1, 1, 0)) %>%
+  mutate( flower = ifelse( is.na(flower), 0, flower)) %>% 
+  summarize( "Total_ratio" = sum(flower)/n_distinct(fram_duped$plant_id)))$Total_ratio
+)
 # shows that, at Fram, 75% of the overlapping observations had at least 1 reproductive individual in the group
+```
+
+```{r}
+tibble( duped_ratio = (picnic_duped %>% 
+  mutate(dupe = ifelse(plant_id %in% picnic_duped[which(duplicated(plant_id)),]$plant_id, 1, 0), 
+         flower = ifelse(number_reproductive_in_group >= 1, 1, 0)) %>%
+  filter(dupe == 1) %>% 
+  mutate( flower = ifelse( is.na(flower), 0, flower)) %>% 
+  summarize( "duped_ratio" = sum(flower)/sum(dupe)))$duped_ratio,
+  
+total_ratio = (picnic_duped %>% 
+  mutate(dupe = ifelse(plant_id %in% picnic_duped[which(duplicated(plant_id)),]$plant_id, 1, 0), 
+         flower = ifelse(number_reproductive_in_group >= 1, 1, 0)) %>%
+  mutate( flower = ifelse( is.na(flower), 0, flower)) %>% 
+  summarize( "Total_ratio" = sum(flower)/n_distinct(picnic_duped$plant_id)))$Total_ratio
+)
 ```
