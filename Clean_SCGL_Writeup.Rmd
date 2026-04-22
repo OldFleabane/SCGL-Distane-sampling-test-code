@@ -196,7 +196,7 @@ fram_id <- mutate(fram_id, zoned = case_when( c(rowSums(mapply( FUN = function(a
        TRUE ~ 0)) 
 
 #using the custom function to find overlapping observations   
-fram_duped <- crossed(filter(fram_id), 1)  # a = plot data w/ID's, b = fuzziness
+fram_duped <- crossed(filter(fram_id), 0.5)  # a = plot data w/ID's, b = fuzziness
 
 fram_plot1 <- fram_duped %>% 
   filter(zoned == 1) %>% #show only zoned observations
@@ -253,7 +253,7 @@ print( paste("Corrected number of observations =",
 
 #make a curve that shows how the number of corrected observations changes as you change the fuzziness
 
-fuzziness <- c(seq(0, 3, by = 0.1))
+fuzziness <- c(seq(0, .5, by = 0.01))
  
       error = fuzziness
       n_duplicated = fuzziness
@@ -295,6 +295,59 @@ pivot_longer(fram_fuzz, cols = !fuzziness, names_to= "type", values_to= "count")
 ```
 
 This chart shows the change in the calculated number of *overlapping*, *unique*, and *corrected* total observations as the fuzziness is increased from 0m to 3m.
+
+### New Fram Function testing 
+
+Idea is to use covariates to generate a probablity score indicating likelihood of pairs of observations being duplicates. 
+Covariates affecting probability:
+- Number in group
+- was reproductive (flowering)
+- distance between observations
+
+Use a Purr functions to map a scoring function on the list of unique observation pairs?
+
+```{r}
+#function to apply comparison to each object_id pair by referencing the fram_1 table
+#Needs to use the expand.grid pairs and parse the fram_1 table and then compare
+#the covariates to evaluate a probability score
+
+test.fun <- function(site){
+  
+  #Creating list of all combinations of global_id's to reference
+  list <- utils::combn(site$global_id, m = 2, simplify = FALSE)
+    
+  
+  list <-  lapply(list[c(1524, 64, 2478)], function(z){
+    
+    #indexing data with the paired global_id's
+    a <- site[which(site$global_id == z[1]),]
+    b <- site[which(site$global_id == z[2]),]
+   
+    #Calculating distance
+    z[3] <- sqrt(sum((c(a$x,a$y) - c(b$x,b$y))^2))
+    
+    #determing if they are on the same transect
+    z[4] <- if(a$transect_orientation == b$transect_orientation) "same transect" else "diff transect"
+    
+    #Group size comparison
+    
+    return(z)
+  }) 
+ 
+ return(list)
+ 
+}
+
+test.fun(fram_1)
+
+#this makes the list of all combos of 2 global_id's into a Dataframe
+#as.data.frame(t(combn(fram_1$global_id, m = 2, simplify = TRUE)))
+
+#fram_1[which(fram_1$global_id == combn(fram_1$global_id, m = 2, simplify = FALSE)[[2065]][1]),]
+  
+
+```
+
 
 ## [Site: Picnic]{.underline}
 
