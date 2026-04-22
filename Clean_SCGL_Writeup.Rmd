@@ -333,9 +333,20 @@ test.fun <- function(site){
     
     return(z)
   }) 
+  
+ df <- data.frame("id_1"=""
+                     , "id_2"="",
+                     "distance" = "",
+                     "transect" = "")
  
- return(list)
- 
+  df <- bind_rows(lapply(list, function(z.1){
+           data.frame("id_1" = z.1[1],
+                      "id_2" = z.1[2],
+                      "distance" = z.1[3],
+                      "transect" = z.1[4])
+    
+  }))
+ return(df)
 }
 
 test.fun(fram_1)
