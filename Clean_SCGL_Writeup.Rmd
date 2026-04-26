@@ -317,7 +317,7 @@ test.fun <- function(site){
   list <- utils::combn(site$global_id, m = 2, simplify = FALSE)
     
   
-  list <-  lapply(list[c(1524, 64, 2478)], function(z){
+  list <-  lapply(list[c(1001, 2565, 3000, 10, 156, 785)], function(z){
     
     #indexing data with the paired global_id's
     a <- site[which(site$global_id == z[1]),]
@@ -334,10 +334,10 @@ test.fun <- function(site){
     return(z)
   }) 
   
- df <- data.frame("id_1"=""
-                     , "id_2"="",
-                     "distance" = "",
-                     "transect" = "")
+  df <- data.frame("id_1"="",
+                   "id_2"="",
+                   "distance" = "",
+                   "transect" = "")
  
   df <- bind_rows(lapply(list, function(z.1){
            data.frame("id_1" = z.1[1],
