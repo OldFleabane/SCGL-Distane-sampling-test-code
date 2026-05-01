@@ -3,12 +3,24 @@ title: "2026_SCGL_work"
 author: "Jonathan Amegin"
 date: "2026-05-01"
 output: html_document
+editor_options: 
+  markdown: 
+    wrap: 90
 ---
 
-To do: 
-- for each observation, create clones in the data frame that switch the "direction_from_transect" field for later duplicate analysis
-- Split the cmoparison of group sizes up between seedlings, vegetative, and reproductive
-- Develop probability scoring to show 'percent similarity' between observations based on weighted scores of covariates
+To do:
+
+~~- for each observation, create clones in the data frame that switch the
+"direction_from_transect" field for later duplicate analysis~~
+
+~~- Split the comparison of group sizes up between seedlings, vegetative, and
+reproductive~~
+
+-   Develop probability scoring to show 'percent similarity' between observations based on
+    weighted scores of covariates
+
+-   Keep only the duplicates with the shortest distance between the compared observations
+    so that only 1 duplicate/global_id
 
 ##Setting Up
 
@@ -27,7 +39,7 @@ scgl_obs <- clean_names(scgl_obs)
 scgl_trans_length <- read_csv("data_raw/transect_2.csv")
 scgl_trans_length <- clean_names(scgl_trans_length)
 
-#filtering NA's and outliers, and chaging some variable classes for later work
+#filtering NA's and outliers, and changing some variable classes for later work
 scgl <- scgl_obs[!(is.na(scgl_obs$transect_meter_mark|scgl_obs$distance_to_group)),] %>%  
         filter(transect_meter_mark < 110, distance_to_group < 10) %>% 
         mutate( object_id = as.factor(object_id),
@@ -88,15 +100,24 @@ oilpad <- scgl1 %>%
 ```
 
 ### 2026 function
-Idea is to use covariates to generate a probablity score indicating likelihood of pairs of observations being duplicates. 
-Covariates affecting probability:
-- Number in groups, split between categories.
-- Distance between observations
-- Direction of transect
-- within/out the crossed area
 
-function to apply comparison to each object_id pair by referencing the fram_1 table
-Needs to use the combn() pairs and parse the fram_1 table and then compare the covariates to evaluate a probability score
+Idea is to use covariates to generate a probablity score indicating likelihood of pairs of
+observations being duplicates.
+
+Covariates affecting probability:
+
+-   Number in groups, split between categories.
+
+-   Distance between observations
+
+-   Direction of transect
+
+-   within/out the crossed area
+
+function to apply comparison to each object_id pair by referencing the fram_1 table Needs
+to use the combn() pairs and parse the fram_1 table and then compare the covariates to
+evaluate a probability score
+
 ```{r}
 
 test.fun <- function(site){
@@ -116,8 +137,7 @@ test.fun <- function(site){
     list.1[4] <- case_when(a$transect_orientation == b$transect_orientation ~ "same",
                            a$transect_orientation != b$transect_orientation ~"different")
 
-    #Group size comparison
-    #break up into different counts 
+    #Group size comparisons
     list.1[5] <- abs(diff(c(a$number_seedlings_in_group,b$number_seedlings_in_group)))
     list.1[6] <- abs(diff(c(a$number_vegetative_in_group,b$number_vegetative_in_group)))
     list.1[7] <- abs(diff(c(a$number_reproductive_in_group,b$number_reproductive_in_group)))
@@ -166,7 +186,10 @@ test.fun <- function(site){
 
 ###Plotting individuals
 
-Transforming Fram coordinates to accurately reflect plot design.This is based on the origin (0,0) being in the lower right of the plot so that one or both of the axis matches the start of at least one transect. In this case, the origins of the three NS transects are at Y = 0, and 4 out of 5 EW transects' origins are at X = 0.
+Transforming Fram coordinates to accurately reflect plot design.This is based on the
+origin (0,0) being in the lower right of the plot so that one or both of the axis matches
+the start of at least one transect. In this case, the origins of the three NS transects
+are at Y = 0, and 4 out of 5 EW transects' origins are at X = 0.
 
 ```{r fram transform}
 
@@ -218,8 +241,8 @@ fram_lines <- tibble( x = c(-10, -20, -30, 0, -10, 0, 0, 0),
     coord_fixed(ratio = 1, xlim = c(-75, 10), ylim = c(0, 100))
 
 ```
+
 ```{r}
-sort_by(test.fun(fram_1[sample(nrow(fram_1), size = 10),]), ~ distance)
+sort_by(test.fun(fram_1[sample(nrow(fram_1), size = 6),]), ~ distance)
   
 ```
-
