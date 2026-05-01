@@ -123,6 +123,74 @@ oilpad <- scgl1 %>%
 
 The raw data needs to be made into a coordinate-grid-friendly format. Each site needs to have the coordinates transformed based on the layout of the transects on the plot.These layouts were recorded via shapefile, so the shapefiles were measured seperately and compared to recorded information to figure out the necessary transformations to the data.
 
+### 2026 function
+```{r}
+# Idea is to use covariates to generate a probablity score indicating likelihood of pairs of observations being duplicates. 
+# Covariates affecting probability:
+# - Number in group
+# - was reproductive (flowering)
+# - distance between observations
+
+#function to apply comparison to each object_id pair by referencing the fram_1 table
+#Needs to use the expand.grid pairs and parse the fram_1 table and then compare
+#the covariates to evaluate a probability score
+
+test.fun <- function(site){
+  #Creating list of all combinations of global_id's to reference
+  list <- utils::combn(site$global_id, m = 2, simplify = FALSE)
+  #Appending calculated variables to the list  
+  list <- lapply(list, function(list.1){
+
+    #indexing data with the paired global_id's
+    a <- site[site$global_id == list.1[1],]
+    b <- site[site$global_id == list.1[2],]
+
+    #Calculating distance
+    list.1[3] <- dist(rbind(c(a$x,a$y), c(b$x,b$y)), method = "euclidean")
+
+    #determining if they are on the same transect
+    list.1[4] <- case_when(a$transect_orientation == b$transect_orientation ~ "same",
+                      a$transect_orientation != b$transect_orientation ~"different")
+
+    #Group size comparison
+    list.1[5] <- paste(sum(select(a, contains("number_")), na.rm = TRUE),
+                  ", " ,
+                  sum(select(b, contains("number_")), na.rm = TRUE),
+                  sep = "")
+
+    #using transect direction and binning distances to get probability score
+    #The '500' left end of the breaks(seq()) is arbitrary as long as it is
+    #larger than the furthest distance. Had trouble calculating it, so used an arbitrary large number
+    list.1[6] <-  1 / cut(as.numeric(list.1[3]), breaks = seq(0,500, 0.10), labels = FALSE)
+    
+     return(list.1)
+  # if(z[4] == "same") 0 else
+
+  })
+
+  df <- data.frame("id_1"="",
+                   "id_2"="",
+                   "distance" = "",
+                   "orientation" = "",
+                   "group_sizes" = "",
+                   "probability")
+
+  df <- bind_rows(lapply(list, function(z){
+           data.frame("id_1" = z[1],
+                      "id_2" = z[2],
+                      "distance" = as.numeric(z[3]),
+                      "orientation" = z[4],
+                      "group_sizes" = z[5],
+                      "probability" = z[6])
+
+   }))
+
+ return(df)
+}
+```
+
+
+
 ## [Site: Fram]{.underline}
 
 ### Plotting individuals
@@ -296,66 +364,42 @@ pivot_longer(fram_fuzz, cols = !fuzziness, names_to= "type", values_to= "count")
 
 This chart shows the change in the calculated number of *overlapping*, *unique*, and *corrected* total observations as the fuzziness is increased from 0m to 3m.
 
-### New Fram Function testing 
-
-Idea is to use covariates to generate a probablity score indicating likelihood of pairs of observations being duplicates. 
-Covariates affecting probability:
-- Number in group
-- was reproductive (flowering)
-- distance between observations
-
-Use a Purr functions to map a scoring function on the list of unique observation pairs?
+### 2026 Function testing 
 
 ```{r}
-#function to apply comparison to each object_id pair by referencing the fram_1 table
-#Needs to use the expand.grid pairs and parse the fram_1 table and then compare
-#the covariates to evaluate a probability score
+fram_new <- test.fun(fram_1)
 
-test.fun <- function(site){
   
-  #Creating list of all combinations of global_id's to reference
-  list <- utils::combn(site$global_id, m = 2, simplify = FALSE)
-    
-  
-  list <-  lapply(list[c(1001, 2565, 3000, 10, 156, 785)], function(z){
-    
-    #indexing data with the paired global_id's
-    a <- site[which(site$global_id == z[1]),]
-    b <- site[which(site$global_id == z[2]),]
+```
+
+
+
+```{r}
+# #Trying out data.tables 
+# install.packages("data.table")
+# library("data.table")
+# 
+# input <- data.table::setDT(fram_1)
+# 
+#   
+#  input1 <- utils::combn(input[,global_id], m = 2, simplify = TRUE) %>% 
+#    t() %>% 
+#    as.data.table()
+#  
+#  mapply(function(a,b){
+#    input1[, `:=`( distance =
+#                           dist(x= rbind(input[global_id %in% b, c(x,y)],
+#                                         input[global_id %in% a, c(x,y)]),
+#                                method = "euclidean")}
+#                transect = mapply(function(a,b){
+#                                  case_when(input[global_id %in% a, transect_orientation] == input[global_id %in% b, transect_orientation] ~ "same",
+#                                     a$transect_orientation != b$transect_orientation ~"different")
+#                )]
+
    
-    #Calculating distance
-    z[3] <- sqrt(sum((c(a$x,a$y) - c(b$x,b$y))^2))
-    
-    #determing if they are on the same transect
-    z[4] <- if(a$transect_orientation == b$transect_orientation) "same transect" else "diff transect"
-    
-    #Group size comparison
-    
-    return(z)
-  }) 
-  
-  df <- data.frame("id_1"="",
-                   "id_2"="",
-                   "distance" = "",
-                   "transect" = "")
  
-  df <- bind_rows(lapply(list, function(z.1){
-           data.frame("id_1" = z.1[1],
-                      "id_2" = z.1[2],
-                      "distance" = z.1[3],
-                      "transect" = z.1[4])
-    
-  }))
- return(df)
-}
+ 
 
-test.fun(fram_1)
-
-#this makes the list of all combos of 2 global_id's into a Dataframe
-#as.data.frame(t(combn(fram_1$global_id, m = 2, simplify = TRUE)))
-
-#fram_1[which(fram_1$global_id == combn(fram_1$global_id, m = 2, simplify = FALSE)[[2065]][1]),]
-  
 
 ```
 
@@ -495,6 +539,32 @@ pivot_longer(picnic_fuzz, cols = !fuzziness, names_to= "type", values_to= "count
 
 
 ```
+
+
+###2026 function
+
+```{r}
+#testing new function at picnic
+
+test_df1 <- picnic_1 %>% 
+  test.fun()
+  
+filter(test_df1, distance == min(distance), .by = c(id_2))
+
+(function(x){
+  cutoffs <- seq(0, 1, by = 0.01)
+   duplicates <- sapply(cutoffs, function(y){
+    nrow(filter(x, distance < y))
+    })
+   data.frame(cutoffs, duplicates)
+})(test_df1) %>% 
+  
+  ggplot( mapping = aes(x = cutoffs, y = duplicates)) +
+  geom_point()
+
+
+```
+
 
 ## Site: OilPad
 
