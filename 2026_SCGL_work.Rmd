@@ -292,7 +292,6 @@ fram_lines <- tibble( x = c(-10, -20, -30, 0, -10, 0, 0, 0),
 ```
 
 ```{r}
-
 #This is just testing some things out, safe to ignore 
 test.fram <- dup.fun(filter(fram_1, zoned == 1), distance = 0.25, cluster = 5)
 
@@ -307,20 +306,32 @@ sapply(seq(0,1,0.05), function(i){
 
 umdo.fun(fram_1, swap = FALSE)
 umdo.fun(fram_1, swap = TRUE)
+```
 
 
+```{r}
 boot.dup <- 
 function(site, number){
   samples <- lapply(1:number, function(i){site[sample(1:nrow(site), replace = T),]})
 
     list  <- lapply(samples, function(site.1){umdo.fun(site.1, swap = FALSE)})
     
-  return(list)
+b.list <- list(   
+"b.ns" =     as.numeric(sapply(1:length(list), function(i) list[[i]]["NS"])),
+"b.ew" =     as.numeric(sapply(1:length(list), function(i) list[[i]]["EW"])),
+"b.fixed" =  as.numeric(sapply(1:length(list), function(i) list[[i]]["fixed"])),
+"b.scored" = as.numeric(sapply(1:length(list), function(i) list[[i]]["scored"]))
+)
+
+b.mean <- sapply(b.list, mean)
+
+std.err <- sapply(b.list, function(i) sqrt(var(i)))
+
+list("dupes" = b.list, "means" = b.mean, "std.err" = std.err )
   }
 
 
-fram.boot <- boot.dup(fram_1, 100)
+fram.boot <- boot.dup(fram_1, 20)
 
-hist(as.numeric(sapply(1:length(fram.boot), function(i) fram.boot[[i]]["NS"])))
-hist(as.numeric(sapply(1:length(fram.boot), function(i) fram.boot[[i]]["fixed"])))
+
 ```
