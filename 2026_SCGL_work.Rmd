@@ -62,9 +62,6 @@ scgl1 <- rbind(scgl, mutate(scgl, swapped_dir = "1",
 
 scgl1[is.na(scgl1[,"direction_to_group"]), "direction_to_group"] <- "NA+"
 
-#making new column with new UUID for each observation due to cloned entries
-scgl1$new_id = UUIDgenerate(use.time = FALSE, n = nrow(scgl1), output = "string")
-
 #use the attributes to add modifiers to the measurements            
 scgl1 <- scgl1 %>% 
    mutate(
@@ -126,6 +123,9 @@ evaluate a probability score
 ```{r}
 
 dup.fun <- function(site, distance, cluster){
+  
+  #making new column with new UUID for each observation due to cloned entries
+  site$new_id = UUIDgenerate(use.time = FALSE, n = nrow(site), output = "string")
   #Creating list of all combinations of global_id's to reference
   list <- utils::combn(site$new_id, m = 2, simplify = FALSE)
   #Appending calculated variables to the list  
@@ -192,6 +192,33 @@ dup.fun <- function(site, distance, cluster){
    }))
 
  return(df)
+}
+
+
+```
+
+```{r}
+# Getting the numbers needed for the unmakred package
+# This function calculates the number of observations made by each observer (diferent transect directions) 
+# alongside the number of observations said to be duplicates based on the earlier dup.fun function
+# and outputs a named list
+
+umdo.fun <- 
+function(site, swap){
+  #allows choice of using the cloned/mirrored observations to for checking errors
+  site.1 <- if(swap == FALSE) filter(site, swapped_dir == 0 & zoned == 1) else
+                              filter(site, zoned == 1)
+  site.ew <- filter(site.1, transect_orientation == "EW")
+  site.ns <- filter(site.1, transect_orientation == "NS")
+  #getting the numbers of duplicates for both the discrepency score & fixed tolerance 
+  #analysis allows for comparison between methods
+  site.score <- filter(dup.fun(site.1, distance = 0.1, cluster = 3), discrepency < 1)
+  site.fixed <- filter(dup.fun(site.1, distance = 0.1, cluster = 3), fixed_tolerance == 1)
+  list <- list("EW" = nrow(site.ew), 
+               "NS" = nrow(site.ns),
+               "scored" = nrow(site.score),
+               "fixed" = nrow(site.fixed))
+  return(list)
 }
 
 
@@ -277,4 +304,23 @@ nrow(filter(test.fram, discrepency < 0.5))
 sapply(seq(0,1,0.05), function(i){
   nrow(filter(test.fram,  swapped_dir == 0 & discrepency < i))
 })
+
+umdo.fun(fram_1, swap = FALSE)
+umdo.fun(fram_1, swap = TRUE)
+
+
+boot.dup <- 
+function(site, number){
+  samples <- lapply(1:number, function(i){site[sample(1:nrow(site), replace = T),]})
+
+    list  <- lapply(samples, function(site.1){umdo.fun(site.1, swap = FALSE)})
+    
+  return(list)
+  }
+
+
+fram.boot <- boot.dup(fram_1, 100)
+
+hist(as.numeric(sapply(1:length(fram.boot), function(i) fram.boot[[i]]["NS"])))
+hist(as.numeric(sapply(1:length(fram.boot), function(i) fram.boot[[i]]["fixed"])))
 ```
