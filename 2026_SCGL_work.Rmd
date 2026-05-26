@@ -62,9 +62,6 @@ scgl1 <- rbind(scgl, mutate(scgl, swapped_dir = "1",
 
 scgl1[is.na(scgl1[,"direction_to_group"]), "direction_to_group"] <- "NA+"
 
-#making new column with new UUID for each observation due to cloned entries
-scgl1$new_id = UUIDgenerate(use.time = FALSE, n = nrow(scgl1), output = "string")
-
 #use the attributes to add modifiers to the measurements            
 scgl1 <- scgl1 %>% 
    mutate(
@@ -126,6 +123,9 @@ evaluate a probability score
 ```{r}
 
 dup.fun <- function(site, distance, cluster){
+  
+  #making new column with new UUID for each observation due to cloned entries
+  site$new_id = UUIDgenerate(use.time = FALSE, n = nrow(site), output = "string")
   #Creating list of all combinations of global_id's to reference
   list <- utils::combn(site$new_id, m = 2, simplify = FALSE)
   #Appending calculated variables to the list  
@@ -162,11 +162,11 @@ dup.fun <- function(site, distance, cluster){
   #use the hamilton, et. al discrepancy score equation as a base
   list <- lapply(list, function(z){
     z[10] <- 
-      (min(as.numeric(z[3]),0.5)/0.5) + # using 1m as the 'beyond a doubt' not duplicate distance
+      (min(as.numeric(z[3]), distance)/ distance) + # using 0.5m as the 'beyond a doubt' not duplicate distance
     #ignore (as.numeric(z[4])* 0.5), #direction
-      (min(as.numeric(z[5]), 8)/8) + #seedlings difference, 5 = not duplicate
+      (min(as.numeric(z[5]), 8)/8) + #seedlings difference, 8 = not duplicate
       (min(as.numeric(z[6]), 5)/5) + #vegetative difference, 5 = not duplicate
-      (min(as.numeric(z[7]), 1)/1) #reproductive difference, 1 = not duplicate
+      (min(as.numeric(z[7]), 2)/2) #reproductive difference, 2 = not duplicate
     #ignore (as.numeric(z[8])* 0.3),#swapped direction_from_transect
     #ignore (as.numeric(z[9]) #were either direction_to_group NA?
     
@@ -188,10 +188,88 @@ dup.fun <- function(site, distance, cluster){
                       "NA_dir" = z[9],
                       "discrepency" = as.numeric(z[10]),
                       "fixed_tolerance" = z[11])
+    
+  
 
    }))
-
+ df$dup_id <- UUIDgenerate(use.time = FALSE, n = nrow(df), output = "string")
+ 
  return(df)
+}
+
+
+#checking for observations that have multiple duplicates & then filtering down to 'most likely'
+dup.fun.1 <- 
+  function(site){
+  df <- filter(site, discrepency <1 & orientation == 0) #filter to possible dupes
+  id <- c(df$id_1, df$id_2) #vector of all id's that are associated with duplicated observations
+  
+  if (sum(duplicated(id)) != 0){
+    dup.id <- unique(id[duplicated(id)])
+  
+  id.1 <- #function to find the multiples that are NOT the most likely
+    lapply(dup.id, function(i){
+        df.1 <- filter(df, id_1 == i | id_2 == i)
+        df.2 <- filter(df.1, discrepency != min(discrepency))$dup_id
+        df.2
+        })
+
+  df[-which(df$dup_id %in% unlist(id.1)),]} 
+  else{df} 
+}
+  
+
+```
+
+```{r}
+# Getting the numbers needed for the unmakred package
+# This function calculates the number of observations made by each observer (diferent transect directions) 
+# alongside the number of observations said to be duplicates based on the earlier dup.fun function
+# and outputs a named list
+
+umdo.fun <- 
+function(site, swap, d, c){
+  #allows choice of using the cloned/mirrored observations for checking errors
+  if(swap == FALSE){ 
+  site.1 <- filter(site, swapped_dir == 0 & zoned == 1) 
+  site.ew <- filter(site.1, transect_orientation == "EW")
+  site.ns <- filter(site.1, transect_orientation == "NS")
+  site.1d <- dup.fun(site.1, distance = d, cluster = c)
+  #getting the numbers of duplicates for both the discrepency score & fixed tolerance 
+  #analysis allows for comparison between methods
+  site.score <- dup.fun.1(filter(site.1d, discrepency < 1))
+  site.fixed <- dup.fun.1(filter(site.1d, fixed_tolerance == 1))
+  
+  
+  list <- list("EW" = nrow(site.ew), 
+               "NS" = nrow(site.ns),
+               "scored" = nrow(site.score),
+               "fixed" = nrow(site.fixed))
+  }else{
+  site.1 <- filter(site, zoned == 1)
+  site.ew <- filter(site.1, transect_orientation == "EW" & swapped_dir == 0)
+  site.ns <- filter(site.1, transect_orientation == "NS" & swapped_dir == 0)
+  site.1d <- dup.fun(site.1, distance = d, cluster = c)
+  #getting the numbers of duplicates for both the discrepency score & fixed tolerance 
+  #analysis allows for comparison between methods
+  site.score <-   dup.fun.1(filter(site.1d, discrepency < 1 & swapped_dir == 0))
+  site.score.1 <- dup.fun.1(filter(site.1d, discrepency < 1 & swapped_dir < 2))
+  site.score.2 <- dup.fun.1(filter(site.1d, discrepency < 1 & swapped_dir <= 2))
+  site.fixed <-   dup.fun.1(filter(site.1d, fixed_tolerance == 1 & swapped_dir == 0))
+  site.fixed.1 <- dup.fun.1(filter(site.1d, fixed_tolerance == 1 & swapped_dir < 2))
+  site.fixed.2 <- dup.fun.1(filter(site.1d, fixed_tolerance == 1 & swapped_dir <= 2))
+  
+  
+  list <- list("EW" = nrow(site.ew), 
+               "NS" = nrow(site.ns),
+               "scored" = nrow(site.score),
+               "scored swap 1" = nrow(site.score.1),
+               "scored swap 2" = nrow(site.score.2),
+               "fixed" = nrow(site.fixed),
+               "fixed swap 1" = nrow(site.fixed.1),
+               "fixed swap 2" = nrow(site.fixed.2))
+  }
+  return(list)
 }
 
 
@@ -265,7 +343,6 @@ fram_lines <- tibble( x = c(-10, -20, -30, 0, -10, 0, 0, 0),
 ```
 
 ```{r}
-
 #This is just testing some things out, safe to ignore 
 test.fram <- dup.fun(filter(fram_1, zoned == 1), distance = 0.25, cluster = 5)
 
@@ -277,4 +354,94 @@ nrow(filter(test.fram, discrepency < 0.5))
 sapply(seq(0,1,0.05), function(i){
   nrow(filter(test.fram,  swapped_dir == 0 & discrepency < i))
 })
+
+umdo.fun(fram_1, swap = FALSE)
+umdo.fun(fram_1, swap = TRUE)
+
+
+  # filter(test.fram, distance <8, discrepency <1)$distance %>% 
+  # hist( breaks = 30)
+```
+
+
+```{r}
+boot.dup <- 
+function(site, number){
+  samples <- lapply(1:number, function(i){site[sample(1:nrow(site), replace = T),]})
+
+    list  <- lapply(samples, function(site.1){umdo.fun(site.1, swap = FALSE, d = 0.5, c = 10)})
+    
+b.list <- list(   
+"b.ns" =     as.numeric(sapply(1:length(list), function(i) list[[i]]["NS"])),
+"b.ew" =     as.numeric(sapply(1:length(list), function(i) list[[i]]["EW"])),
+"b.fixed" =  as.numeric(sapply(1:length(list), function(i) list[[i]]["fixed"])),
+"b.scored" = as.numeric(sapply(1:length(list), function(i) list[[i]]["scored"]))
+)
+
+b.mean <- sapply(b.list, mean)
+
+std.err <- sapply(b.list, function(i) sqrt(var(i)))
+
+list("dupes" = b.list, "means" = b.mean, "std.err" = std.err )
+  }
+
+
+fram.boot <- boot.dup(fram_1, 1000)
+
+hist(fram.boot$dupes$b.scored, labels = TRUE, breaks = 15)
+
+pic.boot <- boot.dup(picnic_1, 50)
+
+hist(pic.boot$dupes$b.ew,
+     breaks = 20,
+     labels = TRUE
+     )
+
+```
+
+
+
+##picnic
+```{r}
+#transforming coordinates to match the plot design. This requires accurate note taking
+ picnic_1 <-  picnic %>% 
+   mutate( 
+    x = case_when(transect_orientation == "NS" & transect_number == "1" ~ x - 20, 
+                  transect_orientation == "NS" & transect_number == "2" ~ x - 30,
+                  transect_orientation == "NS" & transect_number == "3" ~ x - 40,
+                  transect_orientation == "EW" & transect_number == "1" ~ x - 20,
+                  transect_orientation == "EW" & transect_number == "2" ~ x - 10,
+                  transect_orientation == "EW" & transect_number == "3" ~ x - 10,
+                  transect_orientation == "EW" & transect_number == "4" ~ x
+                  ),
+    y = case_when(transect_orientation == "NS" & transect_number == "1" ~ y + 20, 
+                  transect_orientation == "NS" & transect_number == "2" ~ y + 10,
+                  transect_orientation == "NS" & transect_number == "3" ~ y ,
+                  transect_orientation == "EW" & transect_number == "1" ~ y + 20,
+                  transect_orientation == "EW" & transect_number == "2" ~ y + 30,
+                  transect_orientation == "EW" & transect_number == "3" ~ y + 40,
+                  transect_orientation == "EW" & transect_number == "4" ~ y + 50,
+                  ))
+
+#adding an attribute to show if an observation is within the zone that NS & EW transects share
+picnic_1 <-
+  mutate(picnic_1,
+         zoned = case_when(
+           c(rowSums(mapply(FUN = function(a, b){between(a, b-3, b+3)}, picnic_1[, "y"], c(20, 30, 40, 50))) +
+             rowSums(mapply(FUN = function(a, b){between(a, b-3, b+3)}, picnic_1[, "x"], c(-20, -30, -40)))) == 2 ~ 1,
+           TRUE ~ 0))
+
+#Using the custom function to calculate the probability of duplicated observations
+ # dup.pic <- dup.fun(
+ #   filter(picnic_1, zoned == 1),
+ #   distance = 0.25,
+ #   cluster = 5) 
+ 
+#filtering the new dataframe to show only observations that meet the requirement for being duplicates
+ #dup.pic %>% 
+   #filter(discrepency <1 & orientation == 0 & swapped_dir < 2)
+ 
+ umdo.fun(picnic_1, swap = TRUE, d = 0.5, c = 10)
+
+ #dup.fun.1(dup.fun(picnic_1, cluster = 10, distance = 0.5))
 ```
