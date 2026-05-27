@@ -16,10 +16,10 @@ To do:
 ~~- Split the comparison of group sizes up between seedlings, vegetative, and
 reproductive~~
 
--   Develop probability scoring to show 'percent similarity' between observations based on
+~~-   Develop probability scoring to show 'percent similarity' between observations based on
     weighted scores of covariates
 
--   Keep only the duplicates with the shortest distance between the compared observations
+~~-   Keep only the duplicates with the shortest distance between the compared observations
     so that only 1 duplicate/global_id
 
 ##Setting Up
@@ -28,9 +28,7 @@ reproductive~~
 # tidyverse contains both 'dyplr' and 'ggplot2'
 library(tidyverse)
 library(janitor)
-library(ggrepel)
 library(uuid)
-library(boot)
 
 #this contains all observations of clusters of SCGL for all sites & Transects
 scgl_obs <- read_csv("data_raw/distanceSampling_1.csv")
@@ -54,26 +52,29 @@ scgl[is.na(scgl[,"number_reproductive_in_group"]), "number_reproductive_in_group
 
 #adding clone observations with the 'direction_to_group' swapped for later analysis
 #some observations had NA, so need to check both directons for them
-scgl1 <- rbind(scgl, mutate(scgl, swapped_dir = "1",
-                            direction_to_group = case_when(direction_to_group == "+" ~ "-",
-                                                           direction_to_group == "-" ~ "+",
-                                                           is.na(direction_to_group) ~ "NA-"
-                                                          )))
+scgl1 <- rbind(scgl,
+               mutate(scgl,
+                      swapped_dir = "1",
+                      direction_to_group = case_when(direction_to_group == "+" ~ "-",
+                                                     direction_to_group == "-" ~ "+",
+                                                     is.na(direction_to_group) ~ "NA-"
+                                                     )))
 
 scgl1[is.na(scgl1[,"direction_to_group"]), "direction_to_group"] <- "NA+"
 
-#use the attributes to add modifiers to the measurements            
-scgl1 <- scgl1 %>% 
-   mutate(
-     #EW transect meter marks need to be * -1 because they were recorded as if in the(+,+) quadrant, but the mapping we will do is based on (-,+) quadrant. 
+#use the attributes to add modifiers to the measurements
+#EW transect meter marks need to be * -1 because they were recorded as if in the(+,+) quadrant, but the mapping we will do is based on (-,+) quadrant.             
+scgl1 <-
+  scgl1 %>%
+  mutate(
     transect_meter_mark = case_when(
-      transect_orientation == "EW" ~ transect_meter_mark * -1, 
-                              TRUE ~ transect_meter_mark),
+      transect_orientation == "EW" ~ transect_meter_mark * -1,
+      TRUE ~ transect_meter_mark),
     #making the 'direction to group' indicate if the 'distance to group' needs to be left/right of transect.  
     distance_to_group = case_when(
       direction_to_group == "-" | direction_to_group == "NA-" ~ distance_to_group * -1,
-                                                         TRUE ~ distance_to_group ) 
-          )
+                                                         TRUE ~ distance_to_group
+      ))
            
 #setting up the (X,Y) columns to then transform based on plot/shapefile analysis
 scgl1 <- scgl1 %>% 
@@ -121,7 +122,7 @@ to use the combn() pairs and parse the fram_1 table and then compare the covaria
 evaluate a probability score
 
 ```{r}
-
+###Custom Function 1
 dup.fun <- function(site, distance, cluster){
   
   #making new column with new UUID for each observation due to cloned entries
@@ -163,12 +164,9 @@ dup.fun <- function(site, distance, cluster){
   list <- lapply(list, function(z){
     z[10] <- 
       (min(as.numeric(z[3]), distance)/ distance) + # using 0.5m as the 'beyond a doubt' not duplicate distance
-    #ignore (as.numeric(z[4])* 0.5), #direction
       (min(as.numeric(z[5]), 8)/8) + #seedlings difference, 8 = not duplicate
       (min(as.numeric(z[6]), 5)/5) + #vegetative difference, 5 = not duplicate
       (min(as.numeric(z[7]), 2)/2) #reproductive difference, 2 = not duplicate
-    #ignore (as.numeric(z[8])* 0.3),#swapped direction_from_transect
-    #ignore (as.numeric(z[9]) #were either direction_to_group NA?
     
     z[11] <-  #fixed tolerance test
       if((as.numeric(z[3]) < distance) & (sum(as.numeric(z[5],z[6],z[7])) < cluster)) 1 else 0
@@ -188,42 +186,33 @@ dup.fun <- function(site, distance, cluster){
                       "NA_dir" = z[9],
                       "discrepency" = as.numeric(z[10]),
                       "fixed_tolerance" = z[11])
-    
-  
-
    }))
  df$dup_id <- UUIDgenerate(use.time = FALSE, n = nrow(df), output = "string")
  
  return(df)
 }
 
-
+####Custom Function 2
 #checking for observations that have multiple duplicates & then filtering down to 'most likely'
-dup.fun.1 <- 
+dup.fun.1 <-
   function(site){
   df <- filter(site, discrepency <1 & orientation == 0) #filter to possible dupes
   id <- c(df$id_1, df$id_2) #vector of all id's that are associated with duplicated observations
-  
   if (sum(duplicated(id)) != 0){
     dup.id <- unique(id[duplicated(id)])
-  
-  id.1 <- #function to find the multiples that are NOT the most likely
+    id.1 <- #function to find the multiples that are NOT the most likely
     lapply(dup.id, function(i){
         df.1 <- filter(df, id_1 == i | id_2 == i)
         df.2 <- filter(df.1, discrepency != min(discrepency))$dup_id
         df.2
-        })
-
-  df[-which(df$dup_id %in% unlist(id.1)),]} 
+    })
+    df[-which(df$dup_id %in% unlist(id.1)),]}
   else{df} 
 }
-  
 
-```
-
-```{r}
+###Custom Function 3
 # Getting the numbers needed for the unmakred package
-# This function calculates the number of observations made by each observer (diferent transect directions) 
+# This function calculates the number of observations made by each observer (different transect directions) 
 # alongside the number of observations said to be duplicates based on the earlier dup.fun function
 # and outputs a named list
 
@@ -274,6 +263,8 @@ function(site, swap, d, c){
 
 
 ```
+
+
 
 ##Fram
 
@@ -364,42 +355,6 @@ umdo.fun(fram_1, swap = TRUE)
 ```
 
 
-```{r}
-boot.dup <- 
-function(site, number){
-  samples <- lapply(1:number, function(i){site[sample(1:nrow(site), replace = T),]})
-
-    list  <- lapply(samples, function(site.1){umdo.fun(site.1, swap = FALSE, d = 0.5, c = 10)})
-    
-b.list <- list(   
-"b.ns" =     as.numeric(sapply(1:length(list), function(i) list[[i]]["NS"])),
-"b.ew" =     as.numeric(sapply(1:length(list), function(i) list[[i]]["EW"])),
-"b.fixed" =  as.numeric(sapply(1:length(list), function(i) list[[i]]["fixed"])),
-"b.scored" = as.numeric(sapply(1:length(list), function(i) list[[i]]["scored"]))
-)
-
-b.mean <- sapply(b.list, mean)
-
-std.err <- sapply(b.list, function(i) sqrt(var(i)))
-
-list("dupes" = b.list, "means" = b.mean, "std.err" = std.err )
-  }
-
-
-fram.boot <- boot.dup(fram_1, 1000)
-
-hist(fram.boot$dupes$b.scored, labels = TRUE, breaks = 15)
-
-pic.boot <- boot.dup(picnic_1, 50)
-
-hist(pic.boot$dupes$b.ew,
-     breaks = 20,
-     labels = TRUE
-     )
-
-```
-
-
 
 ##picnic
 ```{r}
@@ -431,17 +386,9 @@ picnic_1 <-
              rowSums(mapply(FUN = function(a, b){between(a, b-3, b+3)}, picnic_1[, "x"], c(-20, -30, -40)))) == 2 ~ 1,
            TRUE ~ 0))
 
-#Using the custom function to calculate the probability of duplicated observations
- # dup.pic <- dup.fun(
- #   filter(picnic_1, zoned == 1),
- #   distance = 0.25,
- #   cluster = 5) 
- 
-#filtering the new dataframe to show only observations that meet the requirement for being duplicates
- #dup.pic %>% 
-   #filter(discrepency <1 & orientation == 0 & swapped_dir < 2)
- 
- umdo.fun(picnic_1, swap = TRUE, d = 0.5, c = 10)
 
- #dup.fun.1(dup.fun(picnic_1, cluster = 10, distance = 0.5))
+ umdo.fun(picnic_1, swap = TRUE, d = 0.5, c = 10)
+ 
+
+ 
 ```
